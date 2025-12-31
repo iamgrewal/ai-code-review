@@ -10,21 +10,29 @@ services:
     ports:
       - "3008:3008"
     environment:
-      # URL of your Gitea Server (Internal Docker URL if in same network, or Host IP)
+      # Gitea Configuration (Required)
       - GITEA_HOST=http://server:3000
-      # Token you will generate in Step 4
       - GITEA_TOKEN=${GITEA_TOKEN}
-      # Choose ONE: OpenAI or Copilot
+
+      # LLM Configuration (At least one required: LLM_API_KEY, OPENAI_KEY, or COPILOT_TOKEN)
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+
+      # Legacy LLM Authentication (for backward compatibility)
       - OPENAI_KEY=${OPENAI_KEY}
-      # - COPILOT_TOKEN=your_copilot_token (Only if using Copilot instead of OpenAI)
-      # Optional Configs
-      - IGNORED_FILE_SUFFIX=.json,.md,.lock,.png,.jpg,.svg,.map
-      - COPILOT_TOKEN=none
+      - COPILOT_TOKEN=${COPILOT_TOKEN}
+
+      # Application Settings
+      - IGNORED_FILE_SUFFIX=${IGNORED_FILE_SUFFIX:-.json,.md,.lock}
     extra_hosts:
       - "host.docker.internal:host-gateway" # Helps access host services if needed
     volumes:
-      # This maps the folder on your host machine to the container
+      # Hot-reload for development (changes on host reflect immediately in container)
       - ./main.py:/app/main.py
+      - ./prompts:/app/prompts
+
 networks:
   gitea_gitea:
     external: true

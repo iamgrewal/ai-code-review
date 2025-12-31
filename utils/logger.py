@@ -1,7 +1,9 @@
 import inspect
+import json
 import logging
 import sys
 import threading
+from typing import Any
 
 from loguru import logger
 
@@ -15,7 +17,6 @@ class InterceptHandler(logging.Handler):
             level = logger.level(record.levelname).name
         except ValueError:
             level = record.levelno
-        # print(level)
         # Find caller from where originated the logged message.
         frame, depth = inspect.currentframe(), 0
         while frame and (depth == 0 or frame.f_code.co_filename == logging.__file__):
@@ -25,6 +26,33 @@ class InterceptHandler(logging.Handler):
         logger.opt(depth=depth, exception=record.exc_info).log(
             level, record.getMessage()
         )
+
+
+def structured_formatter(record: dict[str, Any]) -> str:
+    """
+    Convert log record to JSON string with request_id, latency_ms, status fields.
+
+    This enables structured logging for LLM requests and other operations.
+    Extra context can be bound using logger.bind(request_id=..., latency_ms=..., status=...).
+    """
+    log_data = {
+        "timestamp": record["time"].isoformat(),
+        "level": record["level"].name,
+        "message": record["message"],
+        "file": record["file"].name,
+        "line": record["line"],
+    }
+
+    # Add bound context (request_id, latency_ms, status, etc.)
+    extra = record.get("extra", {})
+    if "request_id" in extra:
+        log_data["request_id"] = str(extra["request_id"])
+    if "latency_ms" in extra:
+        log_data["latency_ms"] = int(extra["latency_ms"])
+    if "status" in extra:
+        log_data["status"] = extra["status"]
+
+    return json.dumps(log_data)
 
 
 lock = threading.Lock()
@@ -48,6 +76,8 @@ def setup_logging():
         logger.remove()  # Will remove all handlers already configured
 
         stop_logging()
+
+        # Console output with human-readable format
         logger.add(
             sink=sys.stdout,
             format="<white>{time:YYYY-MM-DD HH:mm:ss}</white>"
@@ -56,9 +86,10 @@ def setup_logging():
             " - <white><b>{message}</b></white>",
         )
 
+        # File output with structured JSON format
         logger.add(
             sink="./logs/app.log",
-            format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
+            format=structured_formatter,
             level="DEBUG",
             rotation="10 MB",
             retention="10 days",

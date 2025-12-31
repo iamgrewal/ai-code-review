@@ -1,3 +1,10 @@
+"""
+Gitea AI Code Reviewer - FastAPI Application
+
+This module provides a webhook service that integrates with Gitea to perform
+AI-powered code reviews on push events.
+"""
+
 import json
 from time import sleep
 from typing import Dict
@@ -13,16 +20,21 @@ from utils.utils import create_comment, extract_info_from_request
 
 app = FastAPI()
 
+# Load configuration
 config = Config()
 
-gitea_clinet = GiteaClient(config.gitea_host, config.gitea_token)
-
-copilot = Copilot(config.copilot_token)
+# Initialize clients
+gitea_client = GiteaClient(config.GITEA_HOST, config.GITEA_TOKEN)
+copilot = Copilot(config)
 
 
 @app.post("/codereview")
 async def analyze_code(request_body: Dict):
+    """
+    Webhook endpoint for Gitea push events.
 
+    Triggers AI code review for pushed commits.
+    """
     owner, repo, sha, ref, pusher, full_name, title, commit_url = (
         extract_info_from_request(request_body)
     )
@@ -30,13 +42,13 @@ async def analyze_code(request_body: Dict):
     if "[skip codereview]" in title:
         return {"message": "Skip codereview"}
 
-    diff_blocks = gitea_clinet.get_diff_blocks(owner, repo, sha)
+    diff_blocks = gitea_client.get_diff_blocks(owner, repo, sha)
     if diff_blocks is None:
         return {"message": "Failed to get diff content"}
 
     current_issue_id = None
 
-    ignored_file_suffix = config.ignored_file_suffix.split(",")
+    ignored_file_suffix = config.IGNORED_FILE_SUFFIX.split(",")
 
     for i, diff_content in enumerate(diff_blocks, start=1):
         file_path = diff_content.split(" ")[0].split("/")
@@ -49,12 +61,12 @@ async def analyze_code(request_body: Dict):
                     logger.warning(f"File {file_name} is ignored")
                     continue
 
-        # Send the diff to ChatGPT for code analysis)
+        # Send the diff to AI for code analysis
         response = copilot.code_review(diff_content)
 
         comment = create_comment(file_name, diff_content, response)
         if i == 1:
-            issue_res = gitea_clinet.create_issue(
+            issue_res = gitea_client.create_issue(
                 owner,
                 repo,
                 f"Code Review {title}",
@@ -68,7 +80,7 @@ async def analyze_code(request_body: Dict):
             logger.success(f"The code review: {issue_url}")
 
             # Send a notification to the webhook
-            if config.webhook.is_init:
+            if config.webhook and config.webhook.is_init:
                 headers = {}
                 if config.webhook.header_name and config.webhook.header_value:
                     headers = {config.webhook.header_name: config.webhook.header_value}
@@ -88,7 +100,7 @@ async def analyze_code(request_body: Dict):
                 )
 
         else:
-            gitea_clinet.add_issue_comment(
+            gitea_client.add_issue_comment(
                 owner,
                 repo,
                 current_issue_id,
@@ -98,8 +110,8 @@ async def analyze_code(request_body: Dict):
         logger.info("Sleep for 1.5 seconds...")
         sleep(1.5)
 
-    # add banner to the issue
-    gitea_clinet.add_issue_comment(
+    # Add banner to the issue
+    gitea_client.add_issue_comment(
         owner,
         repo,
         current_issue_id,
@@ -111,6 +123,11 @@ async def analyze_code(request_body: Dict):
 
 @app.post("/test")
 def test(request_body: str):
+    """
+    Manual testing endpoint for code review.
+
+    Accepts raw code text and returns AI review.
+    """
     logger.success("Test")
     return {"message": copilot.code_review(request_body)}
 
