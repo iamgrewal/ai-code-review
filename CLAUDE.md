@@ -7,9 +7,12 @@
 
 **Tech Stack:**
 - **Framework:** FastAPI (Uvicorn server)
-- **Python:** 3.10+ (pyproject.toml specifies ^3.11)
+- **Python:** 3.11+ (pyproject.toml specifies ^3.11)
+- **Package Manager:** `uv` for fast dependency management
+- **Testing Framework:** `pytest` 8.4+ with `pytest-asyncio` for async tests
+- **Static Analysis:** `ruff` for fast linting and formatting
 - **AI Provider:** Configurable LLM providers via OpenAI-compatible API (OpenAI, Azure, Ollama, LocalAI, Copilot)
-- **Configuration:** python-dotenv with centralized Config class
+- **Configuration:** pydantic-settings with centralized Config class
 - **Logging:** loguru with structured JSON logging
 - **Containerization:** Docker + docker-compose
 - **Prompt Management:** Externalized Markdown files with YAML front matter
