@@ -1,38 +1,234 @@
+# =============================================================================
+# Docker Compose for CortexReview Platform
+# Multi-container architecture: API, Worker, Redis, Supabase (external), Prometheus, Grafana
+# =============================================================================
+
 ---
 services:
-  ai-codereview:
-    build: .
-    container_name: gitea-ai-codereview
+  # ---------------------------------------------------------------------------
+  # API Service: FastAPI webhook endpoints
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      target: api
+    container_name: cortexreview-api
     restart: always
     env_file: .env
     networks:
-      gitea_gitea:
+      - cortexreview-network
     ports:
       - "3008:3008"
     environment:
-      # Gitea Configuration (Required)
-      - GITEA_HOST=http://server:3000
+      # Git Platform Configuration
+      - GITEA_HOST=${GITEA_HOST}
       - GITEA_TOKEN=${GITEA_TOKEN}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - PLATFORM=${PLATFORM:-gitea}
 
-      # LLM Configuration (At least one required: LLM_API_KEY, OPENAI_KEY, or COPILOT_TOKEN)
+      # Webhook Signature Verification
+      - PLATFORM_GITHUB_WEBHOOK_SECRET=${PLATFORM_GITHUB_WEBHOOK_SECRET}
+      - PLATFORM_GITEA_WEBHOOK_SECRET=${PLATFORM_GITEA_WEBHOOK_SECRET}
+
+      # LLM Configuration
       - LLM_API_KEY=${LLM_API_KEY}
-      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.openai.com/v1}
       - LLM_MODEL=${LLM_MODEL:-gpt-4}
       - LLM_PROVIDER=${LLM_PROVIDER:-openai}
 
-      # Legacy LLM Authentication (for backward compatibility)
-      - OPENAI_KEY=${OPENAI_KEY}
-      - COPILOT_TOKEN=${COPILOT_TOKEN}
+      # Celery Configuration
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+
+      # Supabase Configuration
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - SUPABASE_DB_URL=${SUPABASE_DB_URL}
+
+      # RAG Configuration
+      - RAG_ENABLED=${RAG_ENABLED:-true}
+      - RAG_THRESHOLD=${RAG_THRESHOLD:-0.7}
+      - RAG_MATCH_COUNT_MIN=${RAG_MATCH_COUNT_MIN:-3}
+      - RAG_MATCH_COUNT_MAX=${RAG_MATCH_COUNT_MAX:-10}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+
+      # RLHF Configuration
+      - RLHF_ENABLED=${RLHF_ENABLED:-true}
+      - RLHF_THRESHOLD=${RLHF_THRESHOLD:-0.5}
+      - FEEDBACK_ENABLED=${FEEDBACK_ENABLED:-true}
+      - CONSTRAINT_EXPIRATION_DAYS=${CONSTRAINT_EXPIRATION_DAYS:-90}
+
+      # Observability Configuration
+      - ENABLE_PROMETHEUS=${ENABLE_PROMETHEUS:-true}
+      - ENABLE_GRAFANA=${ENABLE_GRAFANA:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
 
       # Application Settings
       - IGNORED_FILE_SUFFIX=${IGNORED_FILE_SUFFIX:-.json,.md,.lock}
     extra_hosts:
-      - "host.docker.internal:host-gateway" # Helps access host services if needed
+      - "host.docker.internal:host-gateway"
     volumes:
-      # Hot-reload for development (changes on host reflect immediately in container)
+      # Hot-reload for development
       - ./main.py:/app/main.py
       - ./prompts:/app/prompts
+      - ./logs:/app/logs
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:3008/docs', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
 
+  # ---------------------------------------------------------------------------
+  # Worker Service: Celery async task processing
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: .
+      target: worker
+    container_name: cortexreview-worker
+    restart: always
+    env_file: .env
+    networks:
+      - cortexreview-network
+    environment:
+      # Git Platform Configuration
+      - GITEA_HOST=${GITEA_HOST}
+      - GITEA_TOKEN=${GITEA_TOKEN}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - PLATFORM=${PLATFORM:-gitea}
+
+      # LLM Configuration
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.openai.com/v1}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+
+      # Celery Configuration
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - CELERY_WORKER_CONCURRENCY=${CELERY_WORKER_CONCURRENCY:-4}
+      - CELERY_TASK_TIME_LIMIT=${CELERY_TASK_TIME_LIMIT:-300}
+
+      # Supabase Configuration
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - SUPABASE_DB_URL=${SUPABASE_DB_URL}
+
+      # RAG Configuration
+      - RAG_ENABLED=${RAG_ENABLED:-true}
+      - RAG_THRESHOLD=${RAG_THRESHOLD:-0.7}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+
+      # RLHF Configuration
+      - RLHF_ENABLED=${RLHF_ENABLED:-true}
+      - RLHF_THRESHOLD=${RLHF_THRESHOLD:-0.5}
+      - CONSTRAINT_EXPIRATION_DAYS=${CONSTRAINT_EXPIRATION_DAYS:-90}
+
+      # Observability
+      - ENABLE_PROMETHEUS=${ENABLE_PROMETHEUS:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      # Temporary directory for repository cloning during indexing
+      - /tmp/cortexreview-clones:/tmp/cortexreview-clones
+      - ./logs:/app/logs
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "celery", "-A", "celery_app", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Redis: Message broker for Celery
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: cortexreview-redis
+    restart: always
+    networks:
+      - cortexreview-network
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Prometheus: Metrics collection
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: cortexreview-prometheus
+    restart: always
+    networks:
+      - cortexreview-network
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docs/prometheus/alerts:/etc/prometheus/alerts:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    profiles:
+      - observability
+
+  # ---------------------------------------------------------------------------
+  # Grafana: Metrics dashboards
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: cortexreview-grafana
+    restart: always
+    networks:
+      - cortexreview-network
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=
+    volumes:
+      - ./docs/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./docs/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    profiles:
+      - observability
+
+# ---------------------------------------------------------------------------
+# Networks
+# ---------------------------------------------------------------------------
 networks:
+  cortexreview-network:
+    driver: bridge
+    name: cortexreview-network
+
+  # Legacy external network for Gitea integration (if needed)
   gitea_gitea:
     external: true
+
+# ---------------------------------------------------------------------------
+# Volumes
+# ---------------------------------------------------------------------------
+volumes:
+  redis-data:
+    name: cortexreview-redis-data
+  prometheus-data:
+    name: cortexreview-prometheus-data
+  grafana-data:
+    name: cortexreview-grafana-data

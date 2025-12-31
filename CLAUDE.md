@@ -429,6 +429,493 @@ Clear module separation: configuration utilities, prompt loading, Gitea API clie
 
 ---
 
+## Phase 2: CortexReview Architecture (Upcoming)
+
+### Vision: From Stateless to Stateful AI
+
+**Current State (Phase 1):**
+- Stateless code review bot
+- Generic feedback without project context
+- No learning from past reviews
+- Gitea-only integration
+- Basic webhook handling
+
+**Target State (Phase 2 - CortexReview):**
+- **Context-Aware**: Uses RAG (Retrieval-Augmented Generation) to understand project history
+- **Self-Learning**: RLHF (Reinforcement Learning from Human Feedback) loop suppresses false positives
+- **Multi-Platform**: GitHub + Gitea via Adapter pattern
+- **Hybrid Interface**: REST API + MCP (Model Context Protocol) for AI agents
+- **Observable**: Prometheus/Grafana dashboards for operations
+- **Auto-Fix**: Generates `git apply` compatible patches
+
+### Phase 2 Tech Stack
+
+*   **Language:** Python 3.10+
+*   **API Framework:** FastAPI (Async)
+*   **Task Queue:** Celery (distributed task processing)
+*   **Message Broker:** Redis (Celery backend and job queue)
+*   **Database:** Supabase (PostgreSQL + `pgvector` for vector storage)
+*   **AI:** OpenAI SDK (LLM + Embeddings)
+*   **Observability:** Prometheus + Grafana
+*   **Containerization:** Docker + Docker Compose
+
+### New Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              CORTEXREVIEW v2.0                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────┐     ┌─────────────┐     ┌─────────────────────────────┐   │
+│  │   GitHub    │     │   Gitea     │     │  Cursor/Windsurf (MCP)      │   │
+│  │  Webhooks   │     │  Webhooks   │     │        AI Agents            │   │
+│  └──────┬──────┘     └──────┬──────┘     └──────────────┬──────────────┘   │
+│         │                   │                           │                   │
+│         └───────────────────┼───────────────────────────┘                   │
+│                             ▼                                               │
+│                   ┌───────────────┐                                         │
+│                   │  FastAPI      │                                         │
+│                   │  Gateway      │                                         │
+│                   │  (REST+MCP)   │                                         │
+│                   └───────┬───────┘                                         │
+│                           │                                                 │
+│                           ▼                                                 │
+│                   ┌───────────────┐                                         │
+│                   │  Celery       │                                         │
+│                   │  Worker Pool  │                                         │
+│                   └───────┬───────┘                                         │
+│                           │                                                 │
+│         ┌─────────────────┼─────────────────┐                               │
+│         ▼                 ▼                 ▼                               │
+│  ┌──────────┐      ┌──────────┐      ┌──────────┐                          │
+│  │   RAG    │      │   RLHF   │      │   LLM    │                          │
+│  │  Engine  │      │  Loop    │      │ Gateway  │                          │
+│  └─────┬────┘      └─────┬────┘      └─────┬────┘                          │
+│        │                 │                 │                               │
+│        ▼                 ▼                 ▼                               │
+│  ┌──────────┐      ┌──────────┐      ┌──────────┐                          │
+│  │Supabase  │      │Supabase  │      │ OpenAI   │                          │
+│  │knowledge │      │constraints│      │ / Ollama │                          │
+│  │  base    │      │  store   │      │          │                          │
+│  └──────────┘      └──────────┘      └──────────┘                          │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                    Observability (Prometheus/Grafana)                │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Updated Directory Structure (Phase 2)
+
+```
+gitea-ai-codereview/
+├── main.py                 # FastAPI App (REST, MCP, Auth)
+├── worker.py               # Celery Worker (AI, RAG, RLHF, Indexing)
+├── models.py               # Pydantic Models (Spec-compliant)
+├── config.py               # Settings & Secrets (Expanded)
+│
+├── codereview/             # AI review layer
+│   ├── ai.py               # Abstract base class
+│   ├── copilot.py          # Copilot implementation
+│   └── rag.py              # NEW: RAG engine (embeddings, vector search)
+│
+├── adapters/               # NEW: Platform abstraction layer
+│   ├── __init__.py
+│   ├── base.py             # Abstract adapter interface
+│   ├── github.py           # GitHub adapter
+│   └── gitea.py            # Gitea adapter (refactored from gitea/client.py)
+│
+├── gitea/                  # DEPRECATED: Moved to adapters/gitea.py
+│
+├── utils/                  # Utilities
+│   ├── config.py
+│   ├── logger.py
+│   ├── prompt_loader.py
+│   └── utils.py
+│
+├── prompts/                # AI prompt files
+│   └── code-review-pr.md
+│
+├── docker-compose.yml      # Infrastructure (Redis, API, Worker, Prometheus, Grafana)
+├── Dockerfile
+├── requirements.txt        # Updated dependencies
+└── CLAUDE.md               # This file
+```
+
+### New Core Components
+
+#### 1. `worker.py` - Celery Worker (The AI Brain)
+
+**Location:** `worker.py` (NEW)
+
+**Purpose:** Async task processing for RAG, RLHF, and LLM generation.
+
+**Key Celery Tasks:**
+
+| Task Name | Purpose |
+|-----------|---------|
+| `process_code_review` | Main review logic with RAG + RLHF + LLM |
+| `index_repository` | Clone repo, generate embeddings, store in Supabase |
+| `process_feedback` | Ingest human feedback into learned_constraints |
+
+**RAG Flow (Positive Retrieval):**
+```python
+# 1. Generate embedding for input diff
+query_vec = get_embedding(diff_content[:2000])
+
+# 2. Query Supabase for similar code patterns
+response = supabase.rpc('match_knowledge', {
+    'query_embedding': query_vec,
+    'match_threshold': 0.75,
+    'match_count': 3
+}).execute()
+
+# 3. Inject retrieved context into LLM prompt
+context_chunks = [r['content'] for r in response.data]
+```
+
+**RLHF Flow (Negative Retrieval):**
+```python
+# 1. Check for previously rejected patterns
+response = supabase.rpc('check_constraints', {
+    'query_embedding': query_vec,
+    'match_threshold': 0.8
+}).execute()
+
+# 2. Build suppression constraints
+constraints = [f"Do NOT flag: {r['user_reason']}" for r in response.data]
+
+# 3. Inject negative constraints into system prompt
+```
+
+#### 2. `adapters/` - Platform Abstraction Layer
+
+**Location:** `adapters/` (NEW)
+
+**Purpose:** Normalize interactions between Git platforms using Adapter pattern.
+
+**Base Interface:**
+```python
+class GitPlatformAdapter(ABC):
+    @abstractmethod
+    def parse_webhook(self, payload: dict) -> PRMetadata:
+        """Normalize webhook payload to unified format"""
+        pass
+
+    @abstractmethod
+    def get_diff(self, repo_id: str, pr_id: int) -> str:
+        """Fetch raw diff string"""
+        pass
+
+    @abstractmethod
+    def post_review(self, repo_id: str, pr_id: int, content: ReviewResult):
+        """Post review comments to platform"""
+        pass
+```
+
+**Implementations:**
+- `adapters/github.py` - GitHub API integration (PyGithub)
+- `adapters/gitea.py` - Gitea API integration (requests)
+
+#### 3. `models.py` - Spec-Compliant Data Models
+
+**Location:** `models.py` (NEW/UPDATED)
+
+**Key Models:**
+
+```python
+class Severity(str, Enum):
+    NIT = "nit"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+class ReviewComment(BaseModel):
+    id: str
+    file_path: str
+    line_range: Dict[str, int]  # {"start": 45, "end": 48}
+    type: Literal["security", "performance", "style", "bug"]
+    severity: Severity
+    message: str
+    suggestion: str
+    confidence_score: float
+    fix_patch: Optional[str] = None  # Unified diff patch
+
+class ReviewResponse(BaseModel):
+    review_id: str
+    status: ReviewStatus
+    summary: str
+    stats: ReviewStats
+    comments: List[ReviewComment]
+    is_partial: bool = False
+```
+
+### New API Endpoints (Phase 2)
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/v1/reviews` | POST | Universal entry for code reviews (REST/MCP/Webhook) |
+| `/v1/reviews/{review_id}` | GET | Poll review status/results |
+| `/v1/reviews/{review_id}/feedback` | POST | Submit RLHF feedback |
+| `/v1/repositories/{repo_id}/index` | POST | Trigger repository indexing (RAG) |
+| `/mcp/manifest` | GET | MCP manifest for AI agents (Cursor, Windsurf) |
+| `/metrics` | GET | Prometheus metrics endpoint |
+| `/health` | GET | Health check |
+
+### Supabase Database Schema
+
+**Required Extensions:**
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+**Tables:**
+
+```sql
+-- 1. Knowledge Base (Positive Examples - RAG)
+CREATE TABLE public.knowledge_base (
+  id bigserial PRIMARY KEY,
+  repo_id text NOT NULL,
+  content text NOT NULL,
+  metadata jsonb DEFAULT '{}'::jsonb,
+  embedding vector(1536),
+  created_at timestamptz DEFAULT now()
+);
+
+-- 2. Learned Constraints (Negative Examples - RLHF)
+CREATE TABLE public.learned_constraints (
+  id bigserial PRIMARY KEY,
+  repo_id text NOT NULL,
+  violation_reason text,
+  code_pattern text,
+  user_reason text,
+  embedding vector(1536),
+  created_at timestamptz DEFAULT now()
+);
+```
+
+**Vector Indexes (IVFFlat):**
+```sql
+CREATE INDEX idx_kb_vector ON public.knowledge_base
+USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+
+CREATE INDEX idx_lc_vector ON public.learned_constraints
+USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+```
+
+**SQL Functions:**
+```sql
+-- Match Knowledge (Context Retrieval)
+CREATE OR REPLACE FUNCTION public.match_knowledge(
+  query_embedding vector(1536),
+  match_threshold float,
+  match_count int
+)
+RETURNS table (id bigint, content text, metadata jsonb, similarity float)
+LANGUAGE sql AS $$
+  SELECT kb.id, kb.content, kb.metadata,
+         1 - (kb.embedding <=> query_embedding) as similarity
+  FROM public.knowledge_base kb
+  WHERE 1 - (kb.embedding <=> query_embedding) > match_threshold
+  ORDER BY kb.embedding <=> query_embedding
+  LIMIT match_count;
+$$;
+
+-- Check Constraints (RLHF Filter)
+CREATE OR REPLACE FUNCTION public.check_constraints(
+  query_embedding vector(1536),
+  match_threshold float
+)
+RETURNS table (id bigint, code_pattern text, user_reason text, similarity float)
+LANGUAGE sql AS $$
+  SELECT lc.id, lc.code_pattern, lc.user_reason,
+         1 - (lc.embedding <=> query_embedding) as similarity
+  FROM public.learned_constraints lc
+  WHERE 1 - (lc.embedding <=> query_embedding) > match_threshold
+  ORDER BY lc.embedding <=> query_embedding
+  LIMIT 3;
+$$;
+```
+
+### New Environment Variables (Phase 2)
+
+**Add to `.env`:**
+
+```bash
+# === Celery / Redis ===
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+
+# === Supabase (RAG + RLHF) ===
+SUPABASE_URL=https://xyz.supabase.co
+SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# === OpenAI (LLM + Embeddings) ===
+OPENAI_API_KEY=sk-...
+EMBEDDING_MODEL=text-embedding-3-small
+LLM_MODEL=gpt-4o
+
+# === Platform Configuration ===
+PLATFORM=github  # or 'gitea' or 'both'
+GITHUB_WEBHOOK_SECRET=whsec_...
+
+# === Observability ===
+PROMETHEUS_ENABLED=true
+GRAFANA_ENABLED=true
+```
+
+### Updated Dependencies (Phase 2)
+
+**Add to `requirements.txt`:**
+```
+# Existing dependencies...
+fastapi>=0.111.0
+requests>=2.32.3
+loguru>=0.7.2
+python-dotenv==1.0.1
+openai>=1.0.0
+uvicorn[standard]
+pyyaml==6.0.1
+
+# NEW: Phase 2 dependencies
+celery[redis]>=5.3.0          # Async task queue
+redis>=5.0.0                  # Message broker
+supabase>=2.0.0              # Supabase Python client
+gitpython>=3.1.0             # Repository indexing
+pydantic>=2.0.0              # Data validation
+pydantic-settings>=2.0.0     # Settings management
+prometheus-client>=0.19.0    # Metrics export
+pygithub>=2.0.0              # GitHub API (optional)
+```
+
+### Updated docker-compose.yml (Phase 2)
+
+```yaml
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build: .
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - .:/app
+      - ./prompts:/app/prompts
+    ports:
+      - "8000:8000"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PLATFORM=${PLATFORM:-gitea}
+    depends_on:
+      - redis
+
+  worker:
+    build: .
+    command: celery -A worker.celery_app worker --loglevel=info
+    volumes:
+      - .:/app
+      - ./prompts:/app/prompts
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      - redis
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api
+      - worker
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+```
+
+### Implementation Roadmap (Phase 2)
+
+**Phase 1: Foundation (Weeks 1-4)**
+- [ ] Set up Celery + Redis infrastructure
+- [ ] Create Supabase project and deploy schema
+- [ ] Implement Pydantic models (ReviewResponse, ReviewComment, etc.)
+- [ ] Migrate Gitea client to adapters/gitea.py
+- [ ] Create adapters/base.py abstract interface
+
+**Phase 2: RAG Implementation (Weeks 5-8)**
+- [ ] Implement worker.py with process_code_review task
+- [ ] Create RAG engine (codereview/rag.py)
+- [ ] Implement index_repository task with gitpython
+- [ ] Test embedding generation and vector search
+- [ ] Update docker-compose.yml with new services
+
+**Phase 3: RLHF & Multi-Platform (Weeks 9-12)**
+- [ ] Implement process_feedback task
+- [ ] Create adapters/github.py implementation
+- [ ] Update main.py to support both GitHub and Gitea webhooks
+- [ ] Add /v1/reviews/{review_id}/feedback endpoint
+- [ ] Test learning loop with synthetic data
+
+**Phase 4: MCP & Observability (Weeks 13+)**
+- [ ] Implement /mcp/manifest endpoint
+- [ ] Add Prometheus metrics to all tasks
+- [ ] Create Grafana dashboards
+- [ ] Implement auto-fix patch generation
+- [ ] End-to-end testing with Cursor/Windsurf
+
+### Key Success Metrics (Phase 2)
+
+| Metric | Target | Measurement |
+|--------|--------|-------------|
+| False Positive Reduction | 50% over 3 months | RLHF feedback loop efficacy |
+| Context Accuracy | 90% of reviews | RAG citations in comments |
+| Review Latency (p95) | < 60s | Prometheus histogram |
+| Vector Search Latency | < 100ms | Supabase query timing |
+| Uptime | 99.5% | Prometheus uptime monitoring |
+
+### Graceful Degradation (Phase 2)
+
+**Supabase Fallback:**
+```python
+if config.get('use_rag_context'):
+    try:
+        context_chunks = query_supabase_rag(diff_content)
+    except Exception as e:
+        logger.warning(f"RAG failed: {e}, falling back to standard review")
+        context_chunks = []  # Proceed without context
+```
+
+**Adapter Selection:**
+```python
+def get_adapter(platform: str) -> GitPlatformAdapter:
+    if platform == "github":
+        return GitHubAdapter(config.GITHUB_TOKEN)
+    elif platform == "gitea":
+        return GiteaAdapter(config.GITEA_HOST, config.GITEA_TOKEN)
+    else:
+        raise ValueError(f"Unsupported platform: {platform}")
+```
+
+---
+
 ## Spec-Driven Development (Spec Kit)
 
 ### References

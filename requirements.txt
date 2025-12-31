@@ -1,3 +1,4 @@
+# Phase 1 Dependencies (Existing)
 annotated-types==0.7.0
 anyio==4.4.0
 certifi==2024.7.4
@@ -39,3 +40,21 @@ uvicorn==0.30.1
 watchfiles==0.22.0
 websockets==12.0
 win32-setctime==1.1.0
+
+# Phase 2 Dependencies (CortexReview Platform)
+# Celery for async task processing
+celery[redis]>=5.3.0
+redis>=5.0.0
+
+# Supabase for vector database and SQL
+supabase>=2.0.0
+
+# Observability
+prometheus-client>=0.20.0
+
+# Git integration
+gitpython>=3.1.40
+pygithub>=2.3.0
+
+# Configuration
+pydantic-settings>=2.0.0
