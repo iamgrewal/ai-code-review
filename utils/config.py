@@ -32,6 +32,7 @@ class Config:
     LLM_API_KEY: str | None
     LLM_BASE_URL: str | None
     LLM_MODEL: str
+    LLM_LOCALE: str
 
     # Legacy Compatibility
     COPILOT_TOKEN: str | None
@@ -87,6 +88,7 @@ class Config:
 
         self.LLM_BASE_URL = os.getenv("LLM_BASE_URL")
         self.LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4")
+        self.LLM_LOCALE = os.getenv("LLM_LOCALE", "en")
         self.LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
 
         # Application Settings
@@ -100,6 +102,13 @@ class Config:
             self.webhook.header_name = os.getenv("WEBHOOK_HEADER_NAME")
             self.webhook.header_value = os.getenv("WEBHOOK_HEADER_VALUE")
             self.webhook.request_body = os.getenv("WEBHOOK_REQUEST_BODY")
+
+            # Warn if webhook configuration is incomplete
+            if not self.webhook.is_init:
+                logger.warning(
+                    "Webhook configuration is incomplete. "
+                    "Both WEBHOOK_URL and WEBHOOK_REQUEST_BODY are required."
+                )
         else:
             self.webhook = None
 

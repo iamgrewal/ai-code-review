@@ -65,7 +65,7 @@ class Copilot(AI):
         try:
             # Load system prompt from file
             context = {
-                "locale": "en",
+                "locale": self.config.LLM_LOCALE,
                 "input-focus": "general best practices",
                 "model": model,
             }
@@ -77,9 +77,12 @@ class Copilot(AI):
             # - https://api.openai.com/v1 -> add /chat/completions
             # - https://api.openai.com/v1/chat/completions -> use as is
             base = self.base_url.rstrip("/")
+
             if base.endswith("/chat/completions"):
+                # Full endpoint already specified
                 url = base
-            elif base.endswith("/v1") or base.endswith("/v1/"):
+            elif base.endswith("/v1"):
+                # Version specified, append chat/completions
                 url = f"{base}/chat/completions"
             elif "/v1/" in base:
                 # Base already has /v1/ in it, append chat/completions

@@ -83,7 +83,7 @@ def _substitute_variables(content: str, context: dict[str, str]) -> str:
         if var_name in context:
             return str(context[var_name])
         # Missing variable - log warning, return placeholder unchanged
-        logger.warning(f"Variable ${{{var_name}}} not found in context, leaving placeholder")
+        logger.warning("Variable ${" + var_name + "} not found in context, leaving placeholder")
         return match.group(0)
 
     return re.sub(r'\$\{([a-zA-Z0-9_]+)\}', replacer, content)
