@@ -186,6 +186,10 @@ prompts/
 # Spec Kit - development artifacts (not for production)
 .specify/
 specs/
+.claude/
+CLAUDE.md 
+.README.zh.md
+.README.md.old
 
 # Documentation (optional - keep in repo or remove as needed)
 docs/
