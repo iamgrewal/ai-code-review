@@ -1,0 +1,145 @@
+# Implementation Plan: Prompts and Configuration Refactoring
+
+**Branch**: `001-prompts-config-refactor` | **Date**: 2025-01-01 | **Spec**: [spec.md](specs/001-prompts-config-refactor/spec.md)
+**Input**: Feature specification from `/specs/001-prompts-config-refactor/spec.md`
+
+## Summary
+
+Refactor the Gitea AI Code Reviewer from a monolithic script with hardcoded prompts and scattered configuration into a modular, containerized service. The refactoring externalizes AI system prompts to Markdown files with YAML front matter support, centralizes all configuration through a single `Config` class using python-dotenv, and enables flexible LLM provider switching (OpenAI, Azure, local LLMs) via environment variables. The system maintains graceful degradation—fallback prompts and safe defaults ensure resilience when optional assets are missing.
+
+## Technical Context
+
+**Language/Version**: Python 3.10+ (pyproject.toml specifies ^3.11, Dockerfile uses 3.10-slim)
+**Primary Dependencies**: FastAPI >=0.111.0, Uvicorn >=0.30.1, python-dotenv >=1.0.0, loguru >=0.7.2, PyYAML >=6.0.1, requests >=2.32.3
+**Storage**: File-based (./prompts/ directory for prompt files, .env for configuration)
+**Testing**: No test framework specified—manual testing via /test endpoint and webhook triggers
+**Target Platform**: Linux container (Docker) with python:3.10-slim base image
+**Project Type**: Single project (Python backend service with webhook API)
+**Performance Goals**: LLM requests timeout at 60 seconds; 1.5s delay between file processing; support for concurrent webhook processing (single worker)
+**Constraints**: Port 3008 fixed (Gitea integration), must run in Docker, prompts must hot-reload without container restart
+**Scale/Scope**: Single repository webhook service, processes code diffs file-by-file, ~10-50 files per typical push event
+
+## Constitution Check
+
+*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+
+### Principle I: Configuration as Code
+
+| Gate | Status | Evidence |
+|------|--------|----------|
+| Centralized Config class using python-dotenv | PASS | FR-004 specifies Config class; loading logic in spec |
+| No hardcoded API keys/URLs in source | PASS | FR-005, FR-006 require LLM_BASE_URL, LLM_API_KEY from Config |
+| All settings externalized to .env | PASS | Configuration Schema defines 14 environment variables |
+
+### Principle II: Prompts as Data
+
+| Gate | Status | Evidence |
+|------|--------|----------|
+| Prompts stored in ./prompts/ directory | PASS | FR-001 specifies loading from ./prompts/ |
+| YAML Front Matter support | PASS | FR-002 requires stripping --- markers |
+| Variable substitution (${variable}) | PASS | FR-003 requires ${variable} replacement |
+| Default prompt must exist | PASS | FR-009 requires fallback prompt when missing |
+
+### Principle III: Container-First
+
+| Gate | Status | Evidence |
+|------|--------|----------|
+| python:3.10-slim base image | PASS | Dockerfile Strategy section specifies |
+| Port 3008 exposed | PASS | Docker Compose Volume Mappings section confirms |
+| Volume mount for ./prompts/ hot-reload | PASS | FR-011 requires volume mount; Hot-Reloading section details behavior |
+
+### Principle IV: Graceful Degradation
+
+| Gate | Status | Evidence |
+|------|--------|----------|
+| Fallback on missing prompts | PASS | FR-013, FR-009 specify safe defaults, WARNING logs |
+| Clear error messages for missing required config | PASS | FR-012 requires ValueError on startup |
+| System continues operating on non-critical failures | PASS | Edge Cases define timeout handling, skip-to-next-file behavior |
+
+### Principle V: OpenAI-Compatible API
+
+| Gate | Status | Evidence |
+|------|--------|----------|
+| LLM Client uses base_url and api_key from Config | PASS | FR-015 requires Config-based initialization |
+| Messages array with prompt as role: system | PASS | FR-014 specifies message construction |
+
+### Principle VI: Modular Service Architecture
+
+| Gate | Status | Evidence |
+|------|--------|----------|
+| Config utilities in dedicated module | PASS | Module Specifications define utils/config.py |
+| Prompt loading separate from business logic | PASS | Module Specifications define utils/prompt_loader.py |
+| Gitea API client abstraction | PASS | Existing gitea/client.py maintained |
+
+**Overall Gate Result**: PASS - All principles satisfied. No violations requiring justification.
+
+### Post-Design Re-Check (Phase 1 Complete)
+
+After completing data model and contract design, all principles remain PASS with no changes required.
+
+## Project Structure
+
+### Documentation (this feature)
+
+```text
+specs/001-prompts-config-refactor/
+├── plan.md              # This file
+├── research.md          # Phase 0: Technology decisions and best practices
+├── data-model.md        # Phase 1: Configuration data structures
+├── quickstart.md        # Phase 1: Developer onboarding guide
+├── contracts/           # Phase 1: OpenAPI spec for webhook endpoints
+└── tasks.md             # Phase 2: Generated by /speckit.tasks
+```
+
+### Source Code (repository root)
+
+```text
+gitea-ai-codereview/
+├── main.py              # FastAPI entry point (refactor: remove hardcoded prompts)
+├── utils/               # Utility modules
+│   ├── config.py        # Config class (refactor: add LLM_BASE_URL, LLM_API_KEY, priority logic)
+│   ├── prompt_loader.py # NEW: load_prompt with YAML parsing and variable substitution
+│   ├── logger.py        # Existing loguru setup (refactor: add structured JSON logging)
+│   └── utils.py         # Helper functions (existing)
+├── codereview/          # AI provider layer
+│   ├── ai.py            # Abstract base class (existing)
+│   └── copilot.py       # Copilot implementation (refactor: use load_prompt, Config)
+├── gitea/               # Gitea integration layer
+│   └── client.py        # Gitea API client (existing, no changes)
+├── prompts/             # NEW: AI prompt files
+│   └── code-review-pr.md # Default system prompt with YAML front matter
+├── logs/                # Application logs (gitignored)
+├── .env                 # Environment variables (gitignored, existing)
+├── .env.example         # Template for required variables (update with new vars)
+├── Dockerfile           # Container definition (existing, verify prompts volume)
+├── docker-compose.yml   # Orchestration (existing, add prompts volume mount)
+├── requirements.txt     # Python dependencies (existing, verify pyyaml, python-dotenv)
+└── pyproject.toml       # Poetry config (existing)
+```
+
+**Structure Decision**: Single project structure with modular separation. The refactoring maintains existing module boundaries (codereview/, gitea/, utils/) while adding utils/prompt_loader.py and the prompts/ directory. No multi-project or frontend/backend split needed—this is a pure backend webhook service.
+
+## Complexity Tracking
+
+> No constitution violations—this section intentionally left empty.
+
+## Phase 0: Research & Technology Decisions
+
+### Research Tasks
+
+1. **OpenAI Python SDK best practices** for base_url configuration and timeout handling
+2. **Python type hints** for python-dotenv Config classes (PEP 484, PEP 585)
+3. **YAML front matter parsing** libraries (pyyaml vs. custom implementation)
+4. **Docker volume mount performance** for hot-reloading in development
+5. **Structured logging patterns** (loguru JSON serialization with request_id correlation)
+
+### Key Decisions (recorded in research.md)
+
+| Decision | Rationale |
+|----------|-----------|
+| Use openai>=1.0.0 SDK | Official library with best-in-class base_url support, timeout handling |
+| PyYAML for front matter parsing | Mature library, handles edge cases, already in requirements.txt |
+| Custom variable substitution (${var}) | Simple string replacement, no external template dependency needed |
+| Structured logs via loguru | Existing dependency, supports JSON serialization via formatter |
+| 60-second timeout on LLM requests | Balance between fault tolerance and user experience (clarified requirement) |
+| Strict auth priority (LLM_API_KEY > OPENAI_KEY > COPILOT_TOKEN) | Predictable behavior, operator control (clarified requirement) |
