@@ -173,8 +173,7 @@ class Copilot(AI):
         """
         if not renew:
             load_dotenv()
-            existing_key = os.getenv("OPENAI_KEY")
-            if existing_key:
+            if existing_key := os.getenv("OPENAI_KEY"):
                 logger.info(f"Using existing OpenAI key")
                 return existing_key
 
@@ -185,15 +184,15 @@ class Copilot(AI):
             "editor-version": "vscode/1.91.0",
             "editor-plugin-version": "copilot-chat/0.16.1",
         }
-        response = requests.get(endpoint, headers=headers)
+        response = requests.get(endpoint, headers=headers, timeout=60)
         if response.status_code == 200:
             token = response.json()["token"]
             set_key(".env", "OPENAI_KEY", token)
-            logger.success(f"Updated OpenAI key")
+            logger.success("Updated OpenAI key")
             return token
-        else:
-            logger.error(f"Failed to get OpenAI key: {response.text}")
-            raise Exception("Failed to get OpenAI key")
+        
+        logger.error(f"Failed to get OpenAI key: {response.text}")
+        raise Exception("Failed to get OpenAI key")
 
     @property
     def banner(self) -> str:

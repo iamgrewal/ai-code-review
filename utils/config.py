@@ -88,7 +88,7 @@ class Config:
 
         self.LLM_BASE_URL = os.getenv("LLM_BASE_URL")
         self.LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4")
-        self.LLM_LOCALE = os.getenv("LLM_LOCALE", "en")
+        self.LLM_LOCALE = os.getenv("LLM_LOCALE", "en_us")
         self.LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
 
         # Application Settings
