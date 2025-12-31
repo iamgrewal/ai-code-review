@@ -1,0 +1,30 @@
+---
+services:
+  ai-codereview:
+    build: .
+    container_name: gitea-ai-codereview
+    restart: always
+    env_file: .env
+    networks:
+      gitea_gitea:
+    ports:
+      - "3008:3008"
+    environment:
+      # URL of your Gitea Server (Internal Docker URL if in same network, or Host IP)
+      - GITEA_HOST=http://server:3000
+      # Token you will generate in Step 4
+      - GITEA_TOKEN=${GITEA_TOKEN}
+      # Choose ONE: OpenAI or Copilot
+      - OPENAI_KEY=${OPENAI_KEY}
+      # - COPILOT_TOKEN=your_copilot_token (Only if using Copilot instead of OpenAI)
+      # Optional Configs
+      - IGNORED_FILE_SUFFIX=.json,.md,.lock,.png,.jpg,.svg,.map
+      - COPILOT_TOKEN=none
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # Helps access host services if needed
+    volumes:
+      # This maps the folder on your host machine to the container
+      - ./main.py:/app/main.py
+networks:
+  gitea_gitea:
+    external: true

@@ -1,0 +1,148 @@
+
+---
+
+# Gitea AI Code Reviewer
+
+A lightweight, self-hosted AI bot that automatically reviews Pull Requests in Gitea. It listens for webhook events, analyzes code changes using LLMs (OpenAI, Z.ai, or Copilot), and posts intelligent review comments directly to your PRs.
+
+## 🚀 Features
+
+* **Automated Reviews:** Automatically analyzes new Pull Requests and updates.
+* **Multi-Provider Support:** Compatible with OpenAI, Zhipu AI (GLM-4), and GitHub Copilot.
+* **Self-Hosted:** Runs entirely on your own infrastructure (Docker or Metal).
+* **Webhook Based:** No complex Gitea Actions runners required; works as a standalone service.
+* **Customizable:** Ignore specific file types or configure validation headers.
+
+## 🛠 Prerequisites
+
+* **Gitea Instance:** Version 1.19+ recommended.
+* **Docker & Docker Compose** (Recommended for deployment).
+* **API Key:** An API key from OpenAI, Zhipu AI (GLM-4), or a Copilot Token.
+
+## 📦 Installation & Deployment
+
+### Option 1: Docker Compose (Recommended)
+
+1. Create a folder for the project and add a `docker-compose.yml` file:
+
+```yaml
+version: "3"
+
+services:
+  gitea-ai-bot:
+    container_name: gitea-ai-codereview
+    image: bestk/gitea-ai-codereview:latest # Or build locally
+    restart: always
+    ports:
+      - "3008:3008"
+    environment:
+      - GITEA_HOST=http://YOUR_GITEA_IP:3000
+      - GITEA_TOKEN=YOUR_GITEA_ACCESS_TOKEN
+      - OPENAI_KEY=YOUR_API_KEY
+      # Optional: For Z.ai or local LLMs
+      # - OPENAI_BASE_URL=https://api.z.ai/api/paas/v4 
+      # - MODEL=glm-4
+    networks:
+      - gitea_network
+
+networks:
+  gitea_network:
+    external: true
+    name: gitea-net # Ensure this matches your Gitea network
+
+```
+
+2. Start the service:
+```bash
+docker-compose up -d
+
+```
+
+
+
+### Option 2: Local Python Setup
+
+1. Clone the repository:
+```bash
+git clone https://github.com/bestK/gitea-ai-codereview.git
+cd gitea-ai-codereview
+
+```
+
+
+2. Create a virtual environment and install dependencies:
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+```
+
+
+3. Configure environment variables (create a `.env` file):
+```ini
+GITEA_HOST=http://localhost:3000
+GITEA_TOKEN=your_token_here
+OPENAI_KEY=sk-xyz...
+
+```
+
+
+4. Run the application:
+```bash
+python main.py
+
+```
+
+
+
+## ⚙️ Configuration
+
+The application is configured entirely via Environment Variables.
+
+| Variable | Description | Required | Default |
+| --- | --- | --- | --- |
+| `GITEA_HOST` | Your Gitea server URL (e.g., `http://192.168.1.50:3000`). | ✅ | None |
+| `GITEA_TOKEN` | Gitea Access Token (Settings -> Applications). | ✅ | None |
+| `OPENAI_KEY` | API Key for your LLM provider. | ✅ | None |
+| `OPENAI_BASE_URL` | Base URL for the LLM API (Use for Z.ai or Local Ollama). | ❌ | OpenAI Default |
+| `COPILOT_TOKEN` | Use this *instead* of `OPENAI_KEY` if using GitHub Copilot. | ❌ | None |
+| `IGNORED_FILE_SUFFIX` | Comma-separated list of extensions to skip (e.g., `.json,.md`). | ❌ | None |
+| `WEBHOOK_HEADER_NAME` | Custom header name for webhook security. | ❌ | None |
+| `WEBHOOK_HEADER_VALUE` | Custom header value for webhook security. | ❌ | None |
+
+## 🔗 Connecting to Gitea
+
+Once the bot is running, you need to tell Gitea to send events to it.
+
+1. Navigate to your **Repository Settings** (or Organization Settings).
+2. Click on **Webhooks** > **Add Webhook** > **Gitea**.
+3. **Target URL:**
+* If using Docker Network: `http://gitea-ai-codereview:3008/hook`
+* If using distinct servers: `http://YOUR_BOT_IP:3008/hook`
+* *(Note: Check `http://localhost:3008/docs` to verify the exact endpoint path if `/hook` fails).*
+
+
+4. **Trigger On:**
+* [x] **Pull Request**
+* [x] **Pull Request Synchronize** (if available, ensures updates are reviewed)
+
+
+5. Click **Add Webhook**.
+
+## 📝 Usage
+
+1. Create a new Branch and push some code.
+2. Open a **Pull Request** in Gitea.
+3. The bot will receive the webhook, fetch the diff, send it to the AI, and post a review comment on the PR timeline automatically.
+
+## ❓ Troubleshooting
+
+* **Bot doesn't reply:** Check the Docker logs (`docker logs gitea-ai-codereview`). If you see "Connection refused", ensure `GITEA_HOST` is reachable from inside the bot container (use `host.docker.internal` or the actual LAN IP, not `localhost`).
+* **404 on Webhook:** Ensure the Target URL ends with the correct endpoint (usually `/hook` or `/webhook`).
+* **Model Errors:** If using Z.ai or a custom provider, verify the `OPENAI_BASE_URL` includes the `/v4` or `/v1` suffix as required by that provider API.
+
+### Relevant Video Resource
+
+[Better Code Reviews with AI? GitHub Copilot and Qodo Merge Tested](https://www.youtube.com/watch?v=wmmMYFVNxA0)
+This video compares different AI code review strategies and tools, helping you understand the type of feedback you can expect when integrating LLMs into your PR workflow.
