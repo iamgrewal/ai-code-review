@@ -95,7 +95,7 @@ class TestMetricsFlow:
         llm_tokens_total.labels(model_type=model_type, model_name=model_name).inc(tokens)
 
         # Get metrics output
-        from prometheus_client import exposition
+        from prometheus_client import REGISTRY, exposition
 
         metrics_output = exposition.generate_latest(REGISTRY).decode("utf-8")
 
@@ -146,7 +146,7 @@ class TestMetricsFlow:
         celery_worker_active_tasks.labels(worker_name=worker_name).set(10)
 
         # Get metrics
-        from prometheus_client import exposition
+        from prometheus_client import REGISTRY, exposition
 
         metrics_output = exposition.generate_latest(REGISTRY).decode("utf-8")
 
@@ -166,7 +166,7 @@ class TestMetricsFlow:
             rag_retrieval_success_total.labels(repo_id=repo_id).inc()
 
         # Get metrics
-        from prometheus_client import exposition
+        from prometheus_client import REGISTRY, exposition
 
         metrics_output = exposition.generate_latest(REGISTRY).decode("utf-8")
 
@@ -184,7 +184,7 @@ class TestMetricsFlow:
             feedback_submitted_total.labels(action=action).inc()
 
         # Get metrics
-        from prometheus_client import exposition
+        from prometheus_client import REGISTRY, exposition
 
         metrics_output = exposition.generate_latest(REGISTRY).decode("utf-8")
 
@@ -230,7 +230,7 @@ class TestMetricsFlow:
             webhook_received_total.labels(platform="github").inc()
 
         # Get metrics
-        from prometheus_client import exposition
+        from prometheus_client import REGISTRY, exposition
 
         metrics_output = exposition.generate_latest(REGISTRY).decode("utf-8")
 

@@ -16,6 +16,21 @@ import pytest
 from httpx import AsyncClient
 
 
+# =============================================================================
+# Constants
+# =============================================================================
+
+# Expected MCP tools that should be available in the manifest
+# This list is duplicated across multiple test methods, so it's extracted as a constant
+# for consistency and easier maintenance when new tools are added.
+EXPECTED_MCP_TOOLS = [
+    "analyze_diff",
+    "index_repository",
+    "submit_feedback",
+    "get_task_status",
+]
+
+
 class TestMCPManifestDiscoveryFlow:
     """
     Integration tests for MCP manifest discovery (T091).
@@ -67,9 +82,7 @@ class TestMCPManifestDiscoveryFlow:
         tool_names = [tool["name"] for tool in manifest["tools"]]
 
         # Verify expected tools are discoverable
-        expected_tools = ["analyze_diff", "index_repository", "submit_feedback", "get_task_status"]
-
-        for expected in expected_tools:
+        for expected in EXPECTED_MCP_TOOLS:
             assert expected in tool_names, (
                 f"Expected tool '{expected}' not found in manifest. Available tools: {tool_names}"
             )

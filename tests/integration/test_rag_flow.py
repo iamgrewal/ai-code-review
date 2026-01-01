@@ -55,7 +55,7 @@ class TestRAGIntegrationFlow:
         FAIL EXPECTED: RAG flow not implemented yet
         """
         # Arrange - Mock repository content
-        sample_code = """def authenticate_user(token):
+        sample_auth_code = """def authenticate_user(token):
     '''Authenticate user with JWT token.'''
     if not token:
         raise ValueError("Token required")

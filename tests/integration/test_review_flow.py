@@ -36,7 +36,7 @@ class TestWebhookToCeleryIntegration:
         FAIL EXPECTED: Celery integration may not be implemented
         """
         # Arrange
-        with patch("worker.process_code_review") as mock_task:
+        with patch("main.process_code_review") as mock_task:
             mock_task.delay = MagicMock(return_value=MagicMock(id=str(uuid.uuid4())))
 
             # Act
@@ -69,7 +69,7 @@ class TestWebhookToCeleryIntegration:
         FAIL EXPECTED: Celery integration may not be implemented
         """
         # Arrange
-        with patch("worker.process_code_review") as mock_task:
+        with patch("main.process_code_review") as mock_task:
             mock_task.delay = MagicMock(return_value=MagicMock(id=str(uuid.uuid4())))
 
             # Act
@@ -99,7 +99,7 @@ class TestWebhookToCeleryIntegration:
         # Arrange
         import time
 
-        with patch("worker.process_code_review") as mock_task:
+        with patch("main.process_code_review") as mock_task:
             mock_task.delay = MagicMock(return_value=MagicMock(id=str(uuid.uuid4())))
 
             # Act
@@ -137,7 +137,7 @@ class TestTaskStatusPollingIntegration:
         FAIL EXPECTED: Task status may not be stored/queryable
         """
         # Arrange - Post webhook
-        with patch("worker.process_code_review") as mock_task:
+        with patch("main.process_code_review") as mock_task:
             task_id = str(uuid.uuid4())
             mock_task.delay = MagicMock(return_value=MagicMock(id=task_id))
 
@@ -171,7 +171,7 @@ class TestTaskStatusPollingIntegration:
         FAIL EXPECTED: Status transitions may not be tracked
         """
         # Arrange
-        with patch("worker.process_code_review") as mock_task:
+        with patch("main.process_code_review") as mock_task:
             task_id = str(uuid.uuid4())
             mock_task.delay = MagicMock(return_value=MagicMock(id=task_id))
 
@@ -211,7 +211,7 @@ class TestCompleteReviewFlowIntegration:
         FAIL EXPECTED: Full integration may have failures
         """
         # Step 1: Post webhook
-        with patch("worker.process_code_review") as mock_task:
+        with patch("main.process_code_review") as mock_task:
             task_id = str(uuid.uuid4())
             mock_task.delay = MagicMock(return_value=MagicMock(id=task_id))
 
@@ -250,7 +250,7 @@ class TestCompleteReviewFlowIntegration:
         FAIL EXPECTED: Push events may not be handled correctly
         """
         # Arrange
-        with patch("worker.process_code_review") as mock_task:
+        with patch("main.process_code_review") as mock_task:
             task_id = str(uuid.uuid4())
             mock_task.delay = MagicMock(return_value=MagicMock(id=task_id))
 
@@ -277,7 +277,7 @@ class TestCompleteReviewFlowIntegration:
         FAIL EXPECTED: Gitea events may not be handled correctly
         """
         # Arrange
-        with patch("worker.process_code_review") as mock_task:
+        with patch("main.process_code_review") as mock_task:
             task_id = str(uuid.uuid4())
             mock_task.delay = MagicMock(return_value=MagicMock(id=task_id))
 
@@ -362,7 +362,7 @@ class TestErrorHandlingIntegration:
         FAIL EXPECTED: May not handle Celery connection errors
         """
         # Arrange
-        with patch("worker.process_code_review") as mock_task:
+        with patch("main.process_code_review") as mock_task:
             # Simulate connection error
             mock_task.delay = MagicMock(side_effect=ConnectionError("Celery unavailable"))
 
@@ -399,7 +399,7 @@ class TestConcurrentRequestsIntegration:
         # Arrange
         import asyncio
 
-        with patch("worker.process_code_review") as mock_task:
+        with patch("main.process_code_review") as mock_task:
             mock_task.delay = MagicMock(return_value=MagicMock(id=str(uuid.uuid4())))
 
             # Act - Send 5 concurrent requests
@@ -436,7 +436,7 @@ class TestTraceIdPropagationIntegration:
         FAIL EXPECTED: Trace ID may not be propagated correctly
         """
         # Arrange
-        with patch("worker.process_code_review") as mock_task:
+        with patch("main.process_code_review") as mock_task:
             task_id = str(uuid.uuid4())
             mock_task.delay = MagicMock(return_value=MagicMock(id=task_id))
 
