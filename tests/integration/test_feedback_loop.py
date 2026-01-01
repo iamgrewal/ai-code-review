@@ -364,17 +364,20 @@ class TestFeedbackLearningLoop:
 
         # Create expired constraint
         now = datetime.now()
+        # Get embedding with error handling
+        embedding_response = mock_openai_client.embeddings.create(
+            input=rejected_feedback_request["final_code_snapshot"]
+        )
+        # Safely access embedding (in production, check if data exists)
+        embedding = embedding_response.data[0].embedding if embedding_response.data else []
+
         expired_constraint = LearnedConstraint(
             id=1,
             repo_id="octocat/test-repo",
             violation_reason="sql_injection",
             code_pattern=rejected_feedback_request["final_code_snapshot"],
             user_reason="Test",
-            embedding=mock_openai_client.embeddings.create(
-                input=rejected_feedback_request["final_code_snapshot"]
-            )
-            .data[0]
-            .embedding,
+            embedding=embedding,
             confidence_score=0.7,
             expires_at=now - timedelta(days=1),  # Expired yesterday
             created_at=now - timedelta(days=90),
@@ -382,13 +385,11 @@ class TestFeedbackLearningLoop:
         )
 
         # Check suppressions
-        query_embedding = (
-            mock_openai_client.embeddings.create(
-                input=rejected_feedback_request["final_code_snapshot"]
-            )
-            .data[0]
-            .embedding
+        # Get query embedding with error handling
+        query_response = mock_openai_client.embeddings.create(
+            input=rejected_feedback_request["final_code_snapshot"]
         )
+        query_embedding = query_response.data[0].embedding if query_response.data else []
 
         suppressions = constraint_repo.check_suppressions(
             query_embedding=query_embedding,

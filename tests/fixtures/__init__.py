@@ -10,17 +10,17 @@ from .test_configs import (
     sample_review_config,
 )
 from .webhook_payloads import (
-    gitea_pr_webhook_payload,
-    gitea_push_webhook_payload,
-    github_pr_webhook_payload,
-    github_push_webhook_payload,
+    gitea_pr_payload,
+    gitea_push_payload,
+    github_pr_payload,
+    github_push_payload,
 )
 
 __all__ = [
-    "gitea_pr_webhook_payload",
-    "gitea_push_webhook_payload",
-    "github_pr_webhook_payload",
-    "github_push_webhook_payload",
+    "gitea_pr_payload",
+    "gitea_push_payload",
+    "github_pr_payload",
+    "github_push_payload",
     "sample_diff_content",
     "sample_review_config",
 ]

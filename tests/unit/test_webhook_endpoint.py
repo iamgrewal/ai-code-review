@@ -20,7 +20,7 @@ class TestWebhookEndpointUnit:
     """
 
     def test_github_webhook_returns_202_with_task_info(
-        self, github_pr_webhook_payload, monkeypatch
+        self, github_pr_payload, monkeypatch
     ):
         """
         T037: GIVEN a valid GitHub webhook payload
@@ -46,7 +46,7 @@ class TestWebhookEndpointUnit:
             with TestClient(app) as client:
                 response = client.post(
                     "/v1/webhook/github",
-                    json=github_pr_webhook_payload,
+                    json=github_pr_payload,
                 )
 
         # Verify HTTP 202
@@ -64,7 +64,7 @@ class TestWebhookEndpointUnit:
         uuid.UUID(data["trace_id"])
 
     def test_gitea_webhook_returns_202_with_task_info(
-        self, gitea_push_webhook_payload, monkeypatch
+        self, gitea_push_payload, monkeypatch
     ):
         """
         T037: GIVEN a valid Gitea webhook payload
@@ -90,7 +90,7 @@ class TestWebhookEndpointUnit:
             with TestClient(app) as client:
                 response = client.post(
                     "/v1/webhook/gitea",
-                    json=gitea_push_webhook_payload,
+                    json=gitea_push_payload,
                 )
 
         # Verify HTTP 202
@@ -159,7 +159,7 @@ class TestWebhookEndpointUnit:
 
         assert response.status_code == 400
 
-    def test_webhook_dispatches_celery_task(self, github_pr_webhook_payload, monkeypatch):
+    def test_webhook_dispatches_celery_task(self, github_pr_payload, monkeypatch):
         """
         T037: GIVEN a valid webhook payload
         WHEN POST /v1/webhook/github
@@ -183,7 +183,7 @@ class TestWebhookEndpointUnit:
             with TestClient(app) as client:
                 response = client.post(
                     "/v1/webhook/github",
-                    json=github_pr_webhook_payload,
+                    json=github_pr_payload,
                 )
 
             # Verify Celery task was called
@@ -210,7 +210,7 @@ class TestWebhookSignatureVerification:
     """
 
     def test_github_webhook_with_valid_signature_accepted(
-        self, github_pr_webhook_payload, monkeypatch
+        self, github_pr_payload, monkeypatch
     ):
         """
         T038: GIVEN a valid GitHub webhook with correct signature
@@ -232,7 +232,7 @@ class TestWebhookSignatureVerification:
 
         from main import app
 
-        payload_bytes = str(github_pr_webhook_payload).encode()
+        payload_bytes = str(github_pr_payload).encode()
         signature = hmac.new(b"test_secret", payload_bytes, hashlib.sha256).hexdigest()
         signature_header = f"sha256={signature}"
 
@@ -242,14 +242,14 @@ class TestWebhookSignatureVerification:
             with TestClient(app) as client:
                 response = client.post(
                     "/v1/webhook/github",
-                    json=github_pr_webhook_payload,
+                    json=github_pr_payload,
                     headers={"X-Hub-Signature-256": signature_header},
                 )
 
         assert response.status_code == 202
 
     def test_github_webhook_with_invalid_signature_returns_401(
-        self, github_pr_webhook_payload, monkeypatch
+        self, github_pr_payload, monkeypatch
     ):
         """
         T038: GIVEN a GitHub webhook with incorrect signature
@@ -274,7 +274,7 @@ class TestWebhookSignatureVerification:
             with TestClient(app) as client:
                 response = client.post(
                     "/v1/webhook/github",
-                    json=github_pr_webhook_payload,
+                    json=github_pr_payload,
                     headers={"X-Hub-Signature-256": "sha256=invalid"},
                 )
 
@@ -284,7 +284,7 @@ class TestWebhookSignatureVerification:
         assert "signature" in data["detail"].lower()
 
     def test_github_signature_verification_can_be_disabled(
-        self, github_pr_webhook_payload, monkeypatch
+        self, github_pr_payload, monkeypatch
     ):
         """
         T038: GIVEN PLATFORM_GITHUB_VERIFY_SIGNATURE=false
@@ -309,13 +309,13 @@ class TestWebhookSignatureVerification:
             with TestClient(app) as client:
                 response = client.post(
                     "/v1/webhook/github",
-                    json=github_pr_webhook_payload,
+                    json=github_pr_payload,
                 )
 
         assert response.status_code == 202
 
     def test_gitea_signature_verification_can_be_disabled(
-        self, gitea_push_webhook_payload, monkeypatch
+        self, gitea_push_payload, monkeypatch
     ):
         """
         T038: GIVEN PLATFORM_GITEA_VERIFY_SIGNATURE=false
@@ -340,13 +340,13 @@ class TestWebhookSignatureVerification:
             with TestClient(app) as client:
                 response = client.post(
                     "/v1/webhook/gitea",
-                    json=gitea_push_webhook_payload,
+                    json=gitea_push_payload,
                 )
 
         assert response.status_code == 202
 
     def test_gitea_webhook_with_valid_signature_accepted(
-        self, gitea_push_webhook_payload, monkeypatch
+        self, gitea_push_payload, monkeypatch
     ):
         """
         T038: GIVEN a valid Gitea webhook with correct signature
@@ -368,7 +368,7 @@ class TestWebhookSignatureVerification:
 
         from main import app
 
-        payload_bytes = str(gitea_push_webhook_payload).encode()
+        payload_bytes = str(gitea_push_payload).encode()
         signature = hmac.new(b"test_secret", payload_bytes, hashlib.sha256).hexdigest()
         signature_header = f"sha256={signature}"
 
@@ -378,14 +378,14 @@ class TestWebhookSignatureVerification:
             with TestClient(app) as client:
                 response = client.post(
                     "/v1/webhook/gitea",
-                    json=gitea_push_webhook_payload,
+                    json=gitea_push_payload,
                     headers={"X-Gitea-Signature": signature_header},
                 )
 
         assert response.status_code == 202
 
     def test_gitea_webhook_with_invalid_signature_returns_401(
-        self, gitea_push_webhook_payload, monkeypatch
+        self, gitea_push_payload, monkeypatch
     ):
         """
         T038: GIVEN a Gitea webhook with incorrect signature
@@ -410,7 +410,7 @@ class TestWebhookSignatureVerification:
             with TestClient(app) as client:
                 response = client.post(
                     "/v1/webhook/gitea",
-                    json=gitea_push_webhook_payload,
+                    json=gitea_push_payload,
                     headers={"X-Gitea-Signature": "sha256=invalid"},
                 )
 
@@ -420,7 +420,7 @@ class TestWebhookSignatureVerification:
         assert "signature" in data["detail"].lower()
 
     def test_signature_verification_skipped_when_no_secret(
-        self, github_pr_webhook_payload, monkeypatch
+        self, github_pr_payload, monkeypatch
     ):
         """
         T038: GIVEN no PLATFORM_GITHUB_WEBHOOK_SECRET configured
@@ -445,7 +445,7 @@ class TestWebhookSignatureVerification:
             with TestClient(app) as client:
                 response = client.post(
                     "/v1/webhook/github",
-                    json=github_pr_webhook_payload,
+                    json=github_pr_payload,
                 )
 
         # Should accept without signature when no secret configured

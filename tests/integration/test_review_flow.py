@@ -26,7 +26,7 @@ class TestWebhookToCeleryIntegration:
 
     @pytest.mark.asyncio
     async def test_github_webhook_dispatches_to_celery(
-        self, async_test_client: AsyncClient, github_pr_webhook_payload
+        self, async_test_client: AsyncClient, github_pr_payload
     ):
         """
         GIVEN a GitHub PR webhook payload
@@ -42,7 +42,7 @@ class TestWebhookToCeleryIntegration:
             # Act
             response = await async_test_client.post(
                 "/v1/webhook/github",
-                json=github_pr_webhook_payload,
+                json=github_pr_payload,
             )
 
             # Assert
@@ -59,7 +59,7 @@ class TestWebhookToCeleryIntegration:
 
     @pytest.mark.asyncio
     async def test_gitea_webhook_dispatches_to_celery(
-        self, async_test_client: AsyncClient, gitea_push_webhook_payload
+        self, async_test_client: AsyncClient, gitea_push_payload
     ):
         """
         GIVEN a Gitea push webhook payload
@@ -75,7 +75,7 @@ class TestWebhookToCeleryIntegration:
             # Act
             response = await async_test_client.post(
                 "/v1/webhook/gitea",
-                json=gitea_push_webhook_payload,
+                json=gitea_push_payload,
             )
 
             # Assert
@@ -87,7 +87,7 @@ class TestWebhookToCeleryIntegration:
 
     @pytest.mark.asyncio
     async def test_webhook_returns_202_within_2_seconds(
-        self, async_test_client: AsyncClient, github_pr_webhook_payload
+        self, async_test_client: AsyncClient, github_pr_payload
     ):
         """
         GIVEN a webhook payload
@@ -106,7 +106,7 @@ class TestWebhookToCeleryIntegration:
             start = time.time()
             response = await async_test_client.post(
                 "/v1/webhook/github",
-                json=github_pr_webhook_payload,
+                json=github_pr_payload,
             )
             elapsed = time.time() - start
 
@@ -127,7 +127,7 @@ class TestTaskStatusPollingIntegration:
 
     @pytest.mark.asyncio
     async def test_poll_task_status_after_webhook(
-        self, async_test_client: AsyncClient, github_pr_webhook_payload
+        self, async_test_client: AsyncClient, github_pr_payload
     ):
         """
         GIVEN a webhook that was accepted
@@ -143,7 +143,7 @@ class TestTaskStatusPollingIntegration:
 
             webhook_response = await async_test_client.post(
                 "/v1/webhook/github",
-                json=github_pr_webhook_payload,
+                json=github_pr_payload,
             )
 
             assert webhook_response.status_code == 202
@@ -161,7 +161,7 @@ class TestTaskStatusPollingIntegration:
 
     @pytest.mark.asyncio
     async def test_task_status_transitions_from_queued_to_processing(
-        self, async_test_client: AsyncClient, github_pr_webhook_payload
+        self, async_test_client: AsyncClient, github_pr_payload
     ):
         """
         GIVEN a task that was queued
@@ -177,7 +177,7 @@ class TestTaskStatusPollingIntegration:
 
             webhook_response = await async_test_client.post(
                 "/v1/webhook/github",
-                json=github_pr_webhook_payload,
+                json=github_pr_payload,
             )
 
             webhook_data = webhook_response.json()
@@ -201,7 +201,7 @@ class TestCompleteReviewFlowIntegration:
 
     @pytest.mark.asyncio
     async def test_full_flow_webhook_to_task_creation(
-        self, async_test_client: AsyncClient, github_pr_webhook_payload
+        self, async_test_client: AsyncClient, github_pr_payload
     ):
         """
         GIVEN a valid GitHub webhook
@@ -217,7 +217,7 @@ class TestCompleteReviewFlowIntegration:
 
             webhook_response = await async_test_client.post(
                 "/v1/webhook/github",
-                json=github_pr_webhook_payload,
+                json=github_pr_payload,
             )
 
             # Assert webhook accepted
@@ -240,7 +240,7 @@ class TestCompleteReviewFlowIntegration:
 
     @pytest.mark.asyncio
     async def test_flow_with_github_push_event(
-        self, async_test_client: AsyncClient, github_push_webhook_payload
+        self, async_test_client: AsyncClient, github_push_payload
     ):
         """
         GIVEN a GitHub push webhook (not PR)
@@ -257,7 +257,7 @@ class TestCompleteReviewFlowIntegration:
             # Act
             webhook_response = await async_test_client.post(
                 "/v1/webhook/github",
-                json=github_push_webhook_payload,
+                json=github_push_payload,
             )
 
             # Assert
@@ -267,7 +267,7 @@ class TestCompleteReviewFlowIntegration:
 
     @pytest.mark.asyncio
     async def test_flow_with_gitea_push_event(
-        self, async_test_client: AsyncClient, gitea_push_webhook_payload
+        self, async_test_client: AsyncClient, gitea_push_payload
     ):
         """
         GIVEN a Gitea push webhook
@@ -284,7 +284,7 @@ class TestCompleteReviewFlowIntegration:
             # Act
             webhook_response = await async_test_client.post(
                 "/v1/webhook/gitea",
-                json=gitea_push_webhook_payload,
+                json=gitea_push_payload,
             )
 
             # Assert
@@ -352,7 +352,7 @@ class TestErrorHandlingIntegration:
 
     @pytest.mark.asyncio
     async def test_celery_connection_error_handled_gracefully(
-        self, async_test_client: AsyncClient, github_pr_webhook_payload
+        self, async_test_client: AsyncClient, github_pr_payload
     ):
         """
         GIVEN Celery connection fails
@@ -369,7 +369,7 @@ class TestErrorHandlingIntegration:
             # Act
             response = await async_test_client.post(
                 "/v1/webhook/github",
-                json=github_pr_webhook_payload,
+                json=github_pr_payload,
             )
 
             # Assert - Should return error (500 or 503)
@@ -387,7 +387,7 @@ class TestConcurrentRequestsIntegration:
 
     @pytest.mark.asyncio
     async def test_concurrent_webhooks_are_handled(
-        self, async_test_client: AsyncClient, github_pr_webhook_payload
+        self, async_test_client: AsyncClient, github_pr_payload
     ):
         """
         GIVEN multiple concurrent webhook requests
@@ -404,7 +404,7 @@ class TestConcurrentRequestsIntegration:
 
             # Act - Send 5 concurrent requests
             tasks = [
-                async_test_client.post("/v1/webhook/github", json=github_pr_webhook_payload)
+                async_test_client.post("/v1/webhook/github", json=github_pr_payload)
                 for _ in range(5)
             ]
             responses = await asyncio.gather(*tasks)
@@ -426,7 +426,7 @@ class TestTraceIdPropagationIntegration:
 
     @pytest.mark.asyncio
     async def test_trace_id_consistency_across_flow(
-        self, async_test_client: AsyncClient, github_pr_webhook_payload
+        self, async_test_client: AsyncClient, github_pr_payload
     ):
         """
         GIVEN a webhook request
@@ -443,7 +443,7 @@ class TestTraceIdPropagationIntegration:
             # Act - Post webhook
             webhook_response = await async_test_client.post(
                 "/v1/webhook/github",
-                json=github_pr_webhook_payload,
+                json=github_pr_payload,
             )
 
             webhook_data = webhook_response.json()

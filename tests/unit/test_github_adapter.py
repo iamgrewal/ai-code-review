@@ -30,7 +30,7 @@ class TestGitHubAdapterParseWebhook:
     # Pull Request Event Tests
     # -------------------------------------------------------------------------
 
-    def test_parse_pr_opened_event(self, github_pr_webhook_payload):
+    def test_parse_pr_opened_event(self, github_pr_payload):
         """
         GIVEN a GitHub pull_request opened webhook payload
         WHEN calling parse_webhook()
@@ -38,7 +38,7 @@ class TestGitHubAdapterParseWebhook:
         """
         # Arrange
         adapter = GitHubAdapter(token="test_token")
-        payload = github_pr_webhook_payload
+        payload = github_pr_payload
 
         # Act
         metadata = adapter.parse_webhook(payload, platform="github")
@@ -120,7 +120,7 @@ class TestGitHubAdapterParseWebhook:
     # Push Event Tests
     # -------------------------------------------------------------------------
 
-    def test_parse_push_event(self, github_push_webhook_payload):
+    def test_parse_push_event(self, github_push_payload):
         """
         GIVEN a GitHub push webhook payload
         WHEN calling parse_webhook()
@@ -128,7 +128,7 @@ class TestGitHubAdapterParseWebhook:
         """
         # Arrange
         adapter = GitHubAdapter(token="test_token")
-        payload = github_push_webhook_payload
+        payload = github_push_payload
 
         # Act
         metadata = adapter.parse_webhook(payload, platform="github")
@@ -209,7 +209,7 @@ class TestGitHubAdapterParseWebhook:
 
         assert "sha" in str(exc_info.value).lower() or "invalid" in str(exc_info.value).lower()
 
-    def test_parse_wrong_platform(self, github_pr_webhook_payload):
+    def test_parse_wrong_platform(self, github_pr_payload):
         """
         GIVEN a GitHub webhook payload
         WHEN calling parse_webhook() with platform="gitea"
@@ -222,7 +222,7 @@ class TestGitHubAdapterParseWebhook:
 
         # Act & Assert
         with pytest.raises(ValueError) as exc_info:
-            adapter.parse_webhook(github_pr_webhook_payload, platform="gitea")
+            adapter.parse_webhook(github_pr_payload, platform="gitea")
 
         assert "github" in str(exc_info.value).lower()
 

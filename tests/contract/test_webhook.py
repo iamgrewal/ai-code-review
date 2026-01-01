@@ -11,6 +11,7 @@ These tests verify the API contract:
 - Supports opt-out via env var
 """
 
+import json
 import uuid
 from unittest.mock import MagicMock, patch
 
@@ -30,7 +31,7 @@ class TestWebhookEndpointContract:
 
     @pytest.mark.asyncio
     async def test_github_webhook_returns_202_with_task_info(
-        self, async_test_client, github_pr_webhook_payload
+        self, async_test_client, github_pr_payload
     ):
         """
         T037: GIVEN a valid GitHub webhook payload
@@ -43,7 +44,7 @@ class TestWebhookEndpointContract:
 
             response = await async_test_client.post(
                 "/v1/webhook/github",
-                json=github_pr_webhook_payload,
+                json=github_pr_payload,
             )
 
         # Verify HTTP 202
@@ -62,7 +63,7 @@ class TestWebhookEndpointContract:
 
     @pytest.mark.asyncio
     async def test_gitea_webhook_returns_202_with_task_info(
-        self, async_test_client, gitea_push_webhook_payload
+        self, async_test_client, gitea_push_payload
     ):
         """
         T037: GIVEN a valid Gitea webhook payload
@@ -75,7 +76,7 @@ class TestWebhookEndpointContract:
 
             response = await async_test_client.post(
                 "/v1/webhook/gitea",
-                json=gitea_push_webhook_payload,
+                json=gitea_push_payload,
             )
 
         # Verify HTTP 202
@@ -132,7 +133,7 @@ class TestWebhookSignatureVerification:
 
     @pytest.mark.asyncio
     async def test_github_webhook_with_valid_signature_accepted(
-        self, async_test_client, github_pr_webhook_payload, monkeypatch
+        self, async_test_client, github_pr_payload, monkeypatch
     ):
         """
         T038: GIVEN a valid GitHub webhook with correct signature
@@ -146,7 +147,7 @@ class TestWebhookSignatureVerification:
         monkeypatch.setenv("PLATFORM_GITHUB_WEBHOOK_SECRET", "test_secret")
         monkeypatch.setenv("PLATFORM_GITHUB_VERIFY_SIGNATURE", "true")
 
-        payload_bytes = str(github_pr_webhook_payload).encode()
+        payload_bytes = json.dumps(github_pr_payload).encode()
         signature = hmac.new(b"test_secret", payload_bytes, hashlib.sha256).hexdigest()
         signature_header = f"sha256={signature}"
 
@@ -155,7 +156,7 @@ class TestWebhookSignatureVerification:
 
             response = await async_test_client.post(
                 "/v1/webhook/github",
-                json=github_pr_webhook_payload,
+                json=github_pr_payload,
                 headers={"X-Hub-Signature-256": signature_header},
             )
 
@@ -163,7 +164,7 @@ class TestWebhookSignatureVerification:
 
     @pytest.mark.asyncio
     async def test_github_webhook_with_invalid_signature_returns_401(
-        self, async_test_client, github_pr_webhook_payload, monkeypatch
+        self, async_test_client, github_pr_payload, monkeypatch
     ):
         """
         T038: GIVEN a GitHub webhook with incorrect signature
@@ -179,7 +180,7 @@ class TestWebhookSignatureVerification:
 
             response = await async_test_client.post(
                 "/v1/webhook/github",
-                json=github_pr_webhook_payload,
+                json=github_pr_payload,
                 headers={"X-Hub-Signature-256": "sha256=invalid"},
             )
 
@@ -190,7 +191,7 @@ class TestWebhookSignatureVerification:
 
     @pytest.mark.asyncio
     async def test_github_signature_verification_can_be_disabled(
-        self, async_test_client, github_pr_webhook_payload, monkeypatch
+        self, async_test_client, github_pr_payload, monkeypatch
     ):
         """
         T038: GIVEN PLATFORM_GITHUB_VERIFY_SIGNATURE=false
@@ -206,7 +207,7 @@ class TestWebhookSignatureVerification:
 
             response = await async_test_client.post(
                 "/v1/webhook/github",
-                json=github_pr_webhook_payload,
+                json=github_pr_payload,
                 # No signature header
             )
 
@@ -214,7 +215,7 @@ class TestWebhookSignatureVerification:
 
     @pytest.mark.asyncio
     async def test_gitea_signature_verification_can_be_disabled(
-        self, async_test_client, gitea_push_webhook_payload, monkeypatch
+        self, async_test_client, gitea_push_payload, monkeypatch
     ):
         """
         T038: GIVEN PLATFORM_GITEA_VERIFY_SIGNATURE=false
@@ -230,7 +231,7 @@ class TestWebhookSignatureVerification:
 
             response = await async_test_client.post(
                 "/v1/webhook/gitea",
-                json=gitea_push_webhook_payload,
+                json=gitea_push_payload,
                 # No signature header
             )
 
@@ -238,7 +239,7 @@ class TestWebhookSignatureVerification:
 
     @pytest.mark.asyncio
     async def test_gitea_webhook_with_valid_signature_accepted(
-        self, async_test_client, gitea_push_webhook_payload, monkeypatch
+        self, async_test_client, gitea_push_payload, monkeypatch
     ):
         """
         T038: GIVEN a valid Gitea webhook with correct signature
@@ -252,7 +253,7 @@ class TestWebhookSignatureVerification:
         monkeypatch.setenv("PLATFORM_GITEA_WEBHOOK_SECRET", "test_secret")
         monkeypatch.setenv("PLATFORM_GITEA_VERIFY_SIGNATURE", "true")
 
-        payload_bytes = str(gitea_push_webhook_payload).encode()
+        payload_bytes = json.dumps(gitea_push_payload).encode()
         signature = hmac.new(b"test_secret", payload_bytes, hashlib.sha256).hexdigest()
         signature_header = f"sha256={signature}"
 
@@ -261,7 +262,7 @@ class TestWebhookSignatureVerification:
 
             response = await async_test_client.post(
                 "/v1/webhook/gitea",
-                json=gitea_push_webhook_payload,
+                json=gitea_push_payload,
                 headers={"X-Gitea-Signature": signature_header},
             )
 
@@ -269,7 +270,7 @@ class TestWebhookSignatureVerification:
 
     @pytest.mark.asyncio
     async def test_gitea_webhook_with_invalid_signature_returns_401(
-        self, async_test_client, gitea_push_webhook_payload, monkeypatch
+        self, async_test_client, gitea_push_payload, monkeypatch
     ):
         """
         T038: GIVEN a Gitea webhook with incorrect signature
@@ -285,7 +286,7 @@ class TestWebhookSignatureVerification:
 
             response = await async_test_client.post(
                 "/v1/webhook/gitea",
-                json=gitea_push_webhook_payload,
+                json=gitea_push_payload,
                 headers={"X-Gitea-Signature": "sha256=invalid"},
             )
 
@@ -296,7 +297,7 @@ class TestWebhookSignatureVerification:
 
     @pytest.mark.asyncio
     async def test_signature_verification_skipped_when_no_secret(
-        self, async_test_client, github_pr_webhook_payload, monkeypatch
+        self, async_test_client, github_pr_payload, monkeypatch
     ):
         """
         T038: GIVEN no PLATFORM_GITHUB_WEBHOOK_SECRET configured
@@ -311,7 +312,7 @@ class TestWebhookSignatureVerification:
 
             response = await async_test_client.post(
                 "/v1/webhook/github",
-                json=github_pr_webhook_payload,
+                json=github_pr_payload,
             )
 
         # Should accept without signature when no secret configured

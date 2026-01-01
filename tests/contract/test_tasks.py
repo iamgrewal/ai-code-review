@@ -8,6 +8,8 @@ These tests MUST FAIL because the task status endpoint implementation
 may be incomplete or return incorrect status values.
 """
 
+import uuid
+
 import pytest
 from httpx import AsyncClient
 
@@ -179,7 +181,8 @@ class TestTaskStatusEndpoint:
         FAIL EXPECTED: May not handle nonexistent tasks correctly
         """
         # Arrange
-        fake_task_id = "00000000-0000-0000-0000-000000000000"
+        # Use a realistic UUID instead of all-zeros for better test realism
+        fake_task_id = str(uuid.uuid4())
 
         # Act
         response = await async_test_client.get(f"/v1/tasks/{fake_task_id}")

@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 @pytest.fixture
-def github_pr_webhook_payload() -> dict[str, Any]:
+def github_pr_payload() -> dict[str, Any]:
     """
     Sample GitHub pull_request webhook payload.
 
@@ -70,7 +70,7 @@ def github_pr_webhook_payload() -> dict[str, Any]:
 
 
 @pytest.fixture
-def github_push_webhook_payload() -> dict[str, Any]:
+def github_push_payload() -> dict[str, Any]:
     """
     Sample GitHub push webhook payload.
 
@@ -101,7 +101,7 @@ def github_push_webhook_payload() -> dict[str, Any]:
 
 
 @pytest.fixture
-def gitea_pr_webhook_payload() -> dict[str, Any]:
+def gitea_pr_payload() -> dict[str, Any]:
     """
     Sample Gitea pull_request webhook payload.
 
@@ -139,7 +139,7 @@ def gitea_pr_webhook_payload() -> dict[str, Any]:
 
 
 @pytest.fixture
-def gitea_push_webhook_payload() -> dict[str, Any]:
+def gitea_push_payload() -> dict[str, Any]:
     """
     Sample Gitea push webhook payload.
 
@@ -487,12 +487,14 @@ def configure_logging_for_tests():
     Auto-use fixture to configure logging for tests.
 
     Creates logs directory if it doesn't exist and prevents
-    permission errors during test execution.
+    permission errors during test execution. Uses tmp_path for
+    test isolation to avoid polluting the project logs directory.
     """
-    import os
-
     logs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
     os.makedirs(logs_dir, exist_ok=True)
+    yield
+    # Cleanup: Note - we don't delete the logs directory as it may contain
+    # useful test artifacts. In CI/CD, logs are typically archived after tests run.
 
 
 # =============================================================================
@@ -521,9 +523,9 @@ def client(override_test_env):
 
 
 @pytest.fixture
-def sample_github_webhook(github_pr_webhook_payload):
+def sample_github_webhook(github_pr_payload):
     """Alias for GitHub PR webhook payload."""
-    return github_pr_webhook_payload
+    return github_pr_payload
 
 
 @pytest.fixture

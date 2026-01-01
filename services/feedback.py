@@ -267,7 +267,7 @@ class FeedbackService:
         try:
             response = self.llm_client.embeddings.create(
                 model=self.config.EMBEDDING_MODEL,
-                input=text[:8000],  # OpenAI limit
+                input=text[:8000],  # OpenAI text-embedding-3-small max is 8191 tokens; using 8000 for safety margin
             )
 
             embedding = response.data[0].embedding

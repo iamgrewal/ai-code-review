@@ -139,13 +139,15 @@ class TestEC002MalformedWebhookPayload:
         THEN should return 422 Unprocessable Entity
         """
         # Arrange & Act & Assert
+        # Note: GitLab/Bitbucket are deferred to future releases (per 001-cortexreview-platform spec)
+        # Platform validation currently rejects unsupported platforms
         with pytest.raises(Exception):  # ValidationError
             PRMetadata(
                 repo_id="octocat/test-repo",
                 pr_number=42,
                 base_sha="a" * 40,
                 head_sha="b" * 40,
-                platform="gitlab",  # Invalid platform
+                platform="gitlab",  # Not yet supported - adapter architecture enables future implementation
             )
 
 

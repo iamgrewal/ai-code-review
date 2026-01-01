@@ -8,7 +8,7 @@ for pull request and push events.
 from typing import Any
 
 
-def github_pr_webhook_payload() -> dict[str, Any]:
+def github_pr_payload() -> dict[str, Any]:
     """
     Sample GitHub pull_request webhook payload.
 
@@ -53,7 +53,7 @@ def github_pr_webhook_payload() -> dict[str, Any]:
     }
 
 
-def github_push_webhook_payload() -> dict[str, Any]:
+def github_push_payload() -> dict[str, Any]:
     """
     Sample GitHub push webhook payload.
 
@@ -83,7 +83,7 @@ def github_push_webhook_payload() -> dict[str, Any]:
     }
 
 
-def gitea_pr_webhook_payload() -> dict[str, Any]:
+def gitea_pr_payload() -> dict[str, Any]:
     """
     Sample Gitea pull_request webhook payload.
 
@@ -120,7 +120,7 @@ def gitea_pr_webhook_payload() -> dict[str, Any]:
     }
 
 
-def gitea_push_webhook_payload() -> dict[str, Any]:
+def gitea_push_payload() -> dict[str, Any]:
     """
     Sample Gitea push webhook payload.
 
