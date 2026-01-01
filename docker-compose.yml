@@ -41,8 +41,8 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
 
       # Supabase Configuration
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
       - SUPABASE_DB_URL=${SUPABASE_DB_URL}
 
       # RAG Configuration
@@ -74,6 +74,7 @@ services:
       - ./logs:/app/logs
     depends_on:
       - redis
+      - supabase-db
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:3008/docs', timeout=5)"]
       interval: 30s
@@ -113,8 +114,8 @@ services:
       - CELERY_TASK_TIME_LIMIT=${CELERY_TASK_TIME_LIMIT:-300}
 
       # Supabase Configuration
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
       - SUPABASE_DB_URL=${SUPABASE_DB_URL}
 
       # RAG Configuration
@@ -136,6 +137,7 @@ services:
       - ./logs:/app/logs
     depends_on:
       - redis
+      - supabase-db
     healthcheck:
       test: ["CMD", "celery", "-A", "celery_app", "inspect", "ping"]
       interval: 30s
@@ -164,7 +166,85 @@ services:
       retries: 3
 
   # ---------------------------------------------------------------------------
+  # Supabase DB: PostgreSQL 15 with pgvector extension
+  # ---------------------------------------------------------------------------
+  supabase-db:
+    image: supabase/postgres:15.14.1.067
+    container_name: cortexreview-supabase-db
+    restart: always
+    networks:
+      - cortexreview-network
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-supabase}
+      - JWT_SECRET=${JWT_SECRET}
+      - ANON_KEY=${ANON_KEY}
+      - SERVICE_ROLE_KEY=${SERVICE_ROLE_KEY}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8
+    volumes:
+      - supabase-db-data:/var/lib/postgresql/data
+      - ./scripts/docker-entrypoint.sh:/app/docker-entrypoint.sh:ro
+      - ./scripts/preflight_check.py:/app/scripts/preflight_check.py:ro
+      - ./scripts/resource_check.py:/app/scripts/resource_check.py:ro
+      - ./scripts/sql:/app/scripts/sql:ro
+    command:
+      - /app/docker-entrypoint.sh
+      - postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${POSTGRES_DB:-supabase}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Supabase REST: PostgREST API server
+  # ---------------------------------------------------------------------------
+  supabase-rest:
+    image: postgrest/postgrest:v14.1
+    container_name: cortexreview-supabase-rest
+    restart: always
+    networks:
+      - cortexreview-network
+    environment:
+      - PGRST_DB_URI=postgres://postgres:${POSTGRES_PASSWORD}@supabase-db:5432/${POSTGRES_DB:-supabase}
+      - PGRST_JWT_SECRET=${JWT_SECRET}
+      - PGRST_DB_SCHEMAS=public
+      - PGRST_DB_ANON_ROLE=postgres
+      - PGRST_SERVER_TIMING_ENABLED=true
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Supabase Studio: Web-based database dashboard
+  # NOTE: Pinned to specific version for reproducible deployments (update as needed)
+  # ---------------------------------------------------------------------------
+  supabase-studio:
+    image: supabase/studio:20240101-ad6ef8f
+    container_name: cortexreview-supabase-studio
+    restart: always
+    networks:
+      - cortexreview-network
+    ports:
+      - "8000:3000"
+    environment:
+      - STUDIO_PG_META_URL=http://supabase-rest:3000
+      - STUDIO_DEFAULT_ORG_ID=local-org
+      - STUDIO_DEFAULT_PROJECT_ID=local-project
+      - STUDIO_PORT=3000
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+      supabase-rest:
+        condition: service_started
+    profiles:
+      - development
+
+  # ---------------------------------------------------------------------------
   # Prometheus: Metrics collection
+  # NOTE: Host port 9091 (not 9090) to avoid conflicts with other services.
+  # Access at: http://localhost:9091
   # ---------------------------------------------------------------------------
   prometheus:
     image: prom/prometheus:latest
@@ -173,7 +253,7 @@ services:
     networks:
       - cortexreview-network
     ports:
-      - "9090:9090"
+      - "9091:9090"  # Host:9091 → Container:9090 (standard Prometheus port)
     volumes:
       - ./docs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docs/prometheus/alerts:/etc/prometheus/alerts:ro
@@ -228,6 +308,8 @@ networks:
 volumes:
   redis-data:
     name: cortexreview-redis-data
+  supabase-db-data:
+    name: cortexreview-supabase-db-data
   prometheus-data:
     name: cortexreview-prometheus-data
   grafana-data:
