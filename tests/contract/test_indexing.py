@@ -226,7 +226,7 @@ class TestRepositoryIndexingEndpoint:
 
         for depth in ["shallow", "deep"]:
             payload = {
-                "git_url": "https://github.com/octacat/test-repo.git",
+                "git_url": "https://github.com/octocat/test-repo.git",
                 "access_token": "ghp_test_token",
                 "index_depth": depth,
             }
@@ -253,7 +253,7 @@ class TestRepositoryIndexingEndpoint:
         FAIL EXPECTED: May not queue Celery task
         """
         # Arrange
-        repo_id = "octacat/test-repo"
+        repo_id = "octocat/test-repo"
         payload = {
             "git_url": "https://github.com/octocat/test-repo.git",
             "access_token": "ghp_test_token",
