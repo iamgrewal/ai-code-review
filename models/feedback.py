@@ -6,7 +6,8 @@ learning loop functionality.
 """
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -32,8 +33,8 @@ class FeedbackRequest(BaseModel):
         description="Free-form explanation (1-1000 characters)",
     )
     final_code_snapshot: str = Field(..., description="Final committed code snippet")
-    user_id: Optional[str] = Field(None, description="User identifier for audit trail")
-    trace_id: Optional[str] = Field(None, description="Correlation ID from original review")
+    user_id: str | None = Field(None, description="User identifier for audit trail")
+    trace_id: str | None = Field(None, description="Correlation ID from original review")
 
 
 class FeedbackRecord(BaseModel):
@@ -53,7 +54,9 @@ class FeedbackRecord(BaseModel):
     developer_comment: str = Field(..., description="Full developer explanation")
     final_code_snapshot: str = Field(..., description="Final code after user changes")
     trace_id: str = Field(..., description="Correlation ID for distributed tracing")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Feedback submission timestamp")
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow, description="Feedback submission timestamp"
+    )
 
 
 class LearnedConstraint(BaseModel):
@@ -71,7 +74,13 @@ class LearnedConstraint(BaseModel):
     code_pattern: str = Field(..., description="Code pattern that was flagged")
     user_reason: str = Field(..., description="User's explanation for rejection")
     embedding: list[float] = Field(..., description="Vector embedding (1536-dimensional)")
-    confidence_score: float = Field(default=0.5, ge=0.0, le=1.0, description="Constraint confidence (0.5-1.0)")
-    expires_at: Optional[datetime] = Field(None, description="Auto-expiration timestamp (90-day default)")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Constraint creation timestamp")
+    confidence_score: float = Field(
+        default=0.5, ge=0.0, le=1.0, description="Constraint confidence (0.5-1.0)"
+    )
+    expires_at: datetime | None = Field(
+        None, description="Auto-expiration timestamp (90-day default)"
+    )
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow, description="Constraint creation timestamp"
+    )
     version: int = Field(default=1, ge=1, description="Constraint version for updates")

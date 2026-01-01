@@ -1,4 +1,5 @@
 import re
+
 import requests
 
 from utils import logger
@@ -24,10 +25,10 @@ class GiteaClient:
             logger.error(f"Failed to get diff content: {res.text}")
             return None
 
-    def create_issue(
-        self, owner: str, repo: str, title: str, body: str, ref: str, pusher: str
-    ):
-        endpoint = f"https://{self.host}/api/v1/repos/{owner}/{repo}/issues?access_token={self.token}"
+    def create_issue(self, owner: str, repo: str, title: str, body: str, ref: str, pusher: str):
+        endpoint = (
+            f"https://{self.host}/api/v1/repos/{owner}/{repo}/issues?access_token={self.token}"
+        )
         data = {
             "assignee": "jenkins",
             "assignees": [pusher],

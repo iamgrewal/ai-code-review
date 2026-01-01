@@ -8,12 +8,14 @@ code review functionality.
 import os
 import time
 import uuid
-from dotenv import load_dotenv, set_key
+
 import requests
-from codereview.ai import AI
+from dotenv import load_dotenv, set_key
 from loguru import logger
-from utils.prompt_loader import load_prompt
+
+from codereview.ai import AI
 from utils.config import Config
+from utils.prompt_loader import load_prompt
 
 
 class Copilot(AI):
@@ -128,9 +130,9 @@ class Copilot(AI):
                     self.api_key = new_token
                     return self.code_review(diff_content, model)
                 else:
-                    logger.bind(request_id=request_id, latency_ms=latency_ms, status="auth_error").error(
-                        "Authentication failed"
-                    )
+                    logger.bind(
+                        request_id=request_id, latency_ms=latency_ms, status="auth_error"
+                    ).error("Authentication failed")
                     return "Error: Authentication failed"
 
             if response.status_code == 200:
@@ -156,7 +158,7 @@ class Copilot(AI):
             logger.bind(request_id=request_id, latency_ms=latency_ms, status="error").error(
                 f"LLM request error: {e}"
             )
-            return f"Error: {str(e)}"
+            return f"Error: {e!s}"
 
     def get_access_token(self, renew: bool = False) -> str:
         """
@@ -174,7 +176,7 @@ class Copilot(AI):
         if not renew:
             load_dotenv()
             if existing_key := os.getenv("OPENAI_KEY"):
-                logger.info(f"Using existing OpenAI key")
+                logger.info("Using existing OpenAI key")
                 return existing_key
 
         endpoint = f"{self.base_url}/copilot_internal/v2/token"
@@ -190,7 +192,7 @@ class Copilot(AI):
             set_key(".env", "OPENAI_KEY", token)
             logger.success("Updated OpenAI key")
             return token
-        
+
         logger.error(f"Failed to get OpenAI key: {response.text}")
         raise Exception("Failed to get OpenAI key")
 

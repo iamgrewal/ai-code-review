@@ -5,6 +5,8 @@ Defines all metrics emitted for monitoring system performance,
 costs, and operational health per Constitution XI (Observability).
 """
 
+import redis
+from celery import Celery
 from prometheus_client import Counter, Gauge, Histogram, Summary
 
 # ============================================================================
@@ -101,6 +103,12 @@ constraint_count = Gauge(
 constraint_expirations_total = Counter(
     "cortexreview_constraint_expirations_total",
     "Total constraints expired by age policy",
+    labelnames=("repo_id",),
+)
+
+false_positive_reduction_ratio = Gauge(
+    "cortexreview_false_positive_reduction_ratio",
+    "False positive reduction ratio (rejected/total feedback) over 30 days",
     labelnames=("repo_id",),
 )
 
@@ -204,26 +212,174 @@ error_total = Counter(
 # Helper Functions
 # ============================================================================
 
+
 def track_review_duration(platform: str, status: str):
     """Decorator to track review duration."""
+
     def decorator(func):
         def wrapper(*args, **kwargs):
             with review_duration_seconds.labels(platform=platform, status=status).time():
                 return func(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
 def track_llm_request(model_type: str, model_name: str):
     """Decorator to track LLM request duration and tokens."""
+
     def decorator(func):
         def wrapper(*args, **kwargs):
-            with llm_request_duration_seconds.labels(model_type=model_type, model_name=model_name).time():
+            with llm_request_duration_seconds.labels(
+                model_type=model_type, model_name=model_name
+            ).time():
                 result = func(*args, **kwargs)
                 # Extract token count if available in result
                 if hasattr(result, "usage"):
                     tokens = result.usage.total_tokens
-                    llm_tokens_total.labels(model_type=model_type, model_name=model_name).inc(tokens)
+                    llm_tokens_total.labels(model_type=model_type, model_name=model_name).inc(
+                        tokens
+                    )
                 return result
+
         return wrapper
+
     return decorator
+
+
+# ============================================================================
+# Celery Metrics Collection Functions (T081-T082)
+# ============================================================================
+
+
+def update_celery_queue_depth(
+    broker_url: str,
+    queue_name: str = "celery",
+) -> int | None:
+    """
+    Update Celery queue depth gauge (T081).
+
+    Queries Redis to get current queue length and updates the gauge.
+
+    Args:
+        broker_url: Redis broker URL (e.g., redis://localhost:6379/0)
+        queue_name: Celery queue name to monitor
+
+    Returns:
+        Current queue depth or None if query fails
+    """
+    try:
+        # Parse Redis URL
+        if broker_url.startswith("redis://"):
+            # Extract host and db from URL
+            # Format: redis://localhost:6379/0
+            url_parts = broker_url.replace("redis://", "").split("/")
+            host_port = url_parts[0]
+            db = int(url_parts[1]) if len(url_parts) > 1 else 0
+
+            # Connect to Redis
+            r = redis.from_url(f"redis://{host_port}/{db}", decode_responses=True)
+
+            # Get queue length (list length for queue key)
+            queue_key = queue_name  # Default Celery queue key
+            queue_depth = r.llen(queue_key)
+
+            # Update gauge
+            celery_queue_depth.labels(queue_name=queue_name).set(queue_depth)
+
+            return queue_depth
+
+    except Exception:
+        # Silent failure - metrics should not crash application
+        pass
+
+    return None
+
+
+def update_celery_worker_active_tasks(celery_app: Celery) -> dict | None:
+    """
+    Update Celery worker active tasks gauge (T082).
+
+    Queries Celery for active tasks and updates worker gauges.
+
+    Args:
+        celery_app: Celery application instance
+
+    Returns:
+        Dict mapping worker_name -> active_task_count or None if query fails
+    """
+    try:
+        # Get active tasks from Celery
+        inspect = celery_app.control.inspect()
+        active_tasks = inspect.active()
+
+        if not active_tasks:
+            return {}
+
+        worker_stats = {}
+        for worker_name, tasks in active_tasks.items():
+            # Count active tasks for this worker
+            active_count = len(tasks) if tasks else 0
+
+            # Update gauge
+            celery_worker_active_tasks.labels(worker_name=worker_name).set(active_count)
+
+            worker_stats[worker_name] = active_count
+
+        return worker_stats
+
+    except Exception:
+        # Silent failure - metrics should not crash application
+        pass
+
+    return None
+
+
+def start_celery_metrics_collector(
+    celery_app: Celery,
+    broker_url: str,
+    queue_name: str = "celery",
+    interval_seconds: int = 10,
+):
+    """
+    Start background thread to collect Celery metrics (T081-T082).
+
+    This function should be called during worker startup to begin
+    periodic collection of Celery queue depth and worker metrics.
+
+    Args:
+        celery_app: Celery application instance
+        broker_url: Redis broker URL
+        queue_name: Celery queue name to monitor
+        interval_seconds: Collection interval (default 10 seconds)
+    """
+    import threading
+    import time
+
+    def collect_metrics():
+        """Background metrics collection loop."""
+        while True:
+            try:
+                # Update queue depth (T081)
+                update_celery_queue_depth(broker_url, queue_name)
+
+                # Update worker active tasks (T082)
+                update_celery_worker_active_tasks(celery_app)
+
+            except Exception:
+                # Silent failure - metrics collector should not crash
+                pass
+
+            # Wait for next collection
+            time.sleep(interval_seconds)
+
+    # Start daemon thread
+    collector_thread = threading.Thread(
+        target=collect_metrics,
+        name="celery_metrics_collector",
+        daemon=True,
+    )
+    collector_thread.start()
+
+    return collector_thread

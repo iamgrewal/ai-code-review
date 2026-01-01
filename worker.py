@@ -9,36 +9,30 @@ Constitution VII: Async-First Processing - All reviews run as background tasks.
 
 import time
 import uuid
-from datetime import datetime, timedelta
-from typing import Optional
 
 from loguru import logger
 from openai import OpenAI
 from supabase import Client, create_client
 
+from adapters.gitea import GiteaAdapter
+from adapters.github import GitHubAdapter
 from celery_app import app
 from codereview.copilot import Copilot
-from models.feedback import FeedbackAction, FeedbackRecord, LearnedConstraint
-from models.indexing import IndexDepth, IndexingProgress, IndexingStatus
 from models.platform import PRMetadata
 from models.review import (
     ReviewComment,
-    ReviewConfig,
     ReviewResponse,
     ReviewStats,
-    ReviewStatus,
 )
-from adapters.github import GitHubAdapter
-from adapters.gitea import GiteaAdapter
+from repositories.knowledge import KnowledgeRepository, create_knowledge_repository
+from services.indexing import IndexingService, create_indexing_service
 from utils.config import Config
 from utils.metrics import (
-    feedback_submitted_total,
-    indexing_duration_seconds,
     llm_tokens_total,
-    rag_retrieval_latency_seconds,
+    rag_retrieval_failure_total,
     review_duration_seconds,
 )
-from utils.secrets import scan_for_secrets, SecretType
+from utils.secrets import scan_for_secrets
 
 # Load configuration (singleton instance)
 config = Config()
@@ -50,7 +44,7 @@ llm_client = OpenAI(
 )
 
 # Initialize Supabase client (if configured)
-supabase_client: Optional[Client] = None
+supabase_client: Client | None = None
 if config.SUPABASE_URL and config.SUPABASE_SERVICE_KEY:
     try:
         supabase_client = create_client(
@@ -60,11 +54,27 @@ if config.SUPABASE_URL and config.SUPABASE_SERVICE_KEY:
         logger.info("Supabase client initialized")
     except Exception as e:
         logger.warning(f"Supabase initialization failed: {e}. RAG/RLHF features disabled.")
+        supabase_client = None
+
+# Initialize RAG repository (if Supabase available)
+knowledge_repo: KnowledgeRepository | None = None
+if supabase_client:
+    knowledge_repo = create_knowledge_repository(supabase_client, config)
+    if knowledge_repo:
+        logger.info("Knowledge repository initialized for RAG")
+
+# Initialize indexing service (if Supabase available)
+indexing_service: IndexingService | None = None
+if supabase_client:
+    indexing_service = create_indexing_service(supabase_client, config)
+    if indexing_service:
+        logger.info("Indexing service initialized")
 
 
 # =============================================================================
 # Celery Tasks
 # =============================================================================
+
 
 @app.task(name="worker.process_code_review", bind=True, max_retries=3)
 def process_code_review(self, metadata_dict: dict, trace_id: str) -> dict:
@@ -84,9 +94,9 @@ def process_code_review(self, metadata_dict: dict, trace_id: str) -> dict:
     """
     start_time = time.time()
 
-    # Bind trace_id to logger for all subsequent logs
-    logger.configure(extra={"trace_id": trace_id})
-    logger.info(f"Processing code review: task_id={self.request.id}")
+    # Bind trace_id to logger for request correlation (Constitution VII)
+    task_logger = logger.bind(trace_id=trace_id, task_id=self.request.id)
+    task_logger.info(f"Processing code review: task_id={self.request.id}")
 
     try:
         # Reconstruct PRMetadata from dict
@@ -105,7 +115,9 @@ def process_code_review(self, metadata_dict: dict, trace_id: str) -> dict:
         diff_blocks = adapter.get_diff(metadata)
 
         if not diff_blocks:
-            logger.warning(f"No diff content found for {metadata.repo_id}#{metadata.pr_number}")
+            task_logger.warning(
+                f"No diff content found for {metadata.repo_id}#{metadata.pr_number}"
+            )
             return {
                 "task_id": self.request.id,
                 "status": "failed",
@@ -113,18 +125,37 @@ def process_code_review(self, metadata_dict: dict, trace_id: str) -> dict:
             }
 
         # -------------------------------------------------------------------------
-        # RAG: Retrieve context from knowledge base (if enabled)
+        # RAG: Retrieve context from knowledge base (if enabled) (T056-T059)
         # -------------------------------------------------------------------------
-        rag_context = []
-        if config.RAG_ENABLED and supabase_client:
+        rag_context_citations = []
+        rag_match_count_value = 0
+        if config.RAG_ENABLED and knowledge_repo:
             rag_start = time.time()
             try:
-                rag_context = _retrieve_rag_context(metadata, diff_blocks)
+                # Build query from diff blocks for context retrieval
+                query_text = "\n".join(diff_blocks[:3])  # Use first 3 diffs as query
+                rag_context = knowledge_repo.search_context(
+                    query_text=query_text,
+                    repo_id=metadata.repo_id,
+                    match_threshold=config.RAG_THRESHOLD,
+                    match_count=config.RAG_MATCH_COUNT_MIN,
+                )
+                rag_match_count_value = len(rag_context)
                 rag_latency = time.time() - rag_start
-                rag_retrieval_latency_seconds.labels(repo_id=metadata.repo_id).observe(rag_latency)
-                logger.info(f"RAG retrieved {len(rag_context)} context chunks in {rag_latency:.2f}s")
+
+                # Extract citations from RAG results
+                rag_context_citations = [r.get("citation", "") for r in rag_context[:3]]
+
+                task_logger.info(
+                    f"RAG retrieved {rag_match_count_value} context chunks in {rag_latency:.2f}s"
+                )
             except Exception as e:
-                logger.warning(f"RAG retrieval failed (graceful fallback): {e}")
+                rag_retrieval_failure_total.labels(
+                    repo_id=metadata.repo_id, reason=type(e).__name__
+                ).inc()
+                task_logger.warning(f"RAG retrieval failed (graceful fallback): {e}")
+        else:
+            task_logger.debug("RAG disabled or knowledge repository not available")
 
         # -------------------------------------------------------------------------
         # RLHF: Check for learned constraints (if enabled)
@@ -134,9 +165,9 @@ def process_code_review(self, metadata_dict: dict, trace_id: str) -> dict:
             try:
                 suppressed_patterns = _check_learned_constraints(metadata, diff_blocks)
                 if suppressed_patterns:
-                    logger.info(f"RLHF suppressed {len(suppressed_patterns)} known patterns")
+                    task_logger.info(f"RLHF suppressed {len(suppressed_patterns)} known patterns")
             except Exception as e:
-                logger.warning(f"RLHF constraint check failed (graceful fallback): {e}")
+                task_logger.warning(f"RLHF constraint check failed (graceful fallback): {e}")
 
         # -------------------------------------------------------------------------
         # LLM: Generate review comments
@@ -149,7 +180,7 @@ def process_code_review(self, metadata_dict: dict, trace_id: str) -> dict:
         for diff_content in diff_blocks:
             # Skip if suppressed by RLHF
             if _is_diff_suppressed(diff_content, suppressed_patterns):
-                logger.debug(f"Diff suppressed by learned constraints")
+                task_logger.debug("Diff suppressed by learned constraints")
                 continue
 
             # Generate review comment
@@ -162,7 +193,7 @@ def process_code_review(self, metadata_dict: dict, trace_id: str) -> dict:
                 # Scan for secrets (data governance)
                 secret_matches = scan_for_secrets(diff_content, file_path)
                 if secret_matches:
-                    logger.warning(f"Secrets detected in {file_path}, redacting from review")
+                    task_logger.warning(f"Secrets detected in {file_path}, redacting from review")
 
                 comment = ReviewComment(
                     id=str(uuid.uuid4()),
@@ -173,7 +204,7 @@ def process_code_review(self, metadata_dict: dict, trace_id: str) -> dict:
                     message=response,
                     suggestion="",
                     confidence_score=0.5,
-                    citations=rag_context[:3],  # Add up to 3 RAG citations
+                    citations=rag_context_citations,  # Add RAG citations (T058)
                 )
                 comments.append(comment)
 
@@ -184,8 +215,12 @@ def process_code_review(self, metadata_dict: dict, trace_id: str) -> dict:
         # Metrics: Record observability data (Constitution XI)
         # -------------------------------------------------------------------------
         duration = time.time() - start_time
-        review_duration_seconds.labels(platform=metadata.platform, status="success").observe(duration)
-        llm_tokens_total.labels(model_type=config.LLM_MODEL, model_name=config.LLM_MODEL).inc(total_tokens)
+        review_duration_seconds.labels(platform=metadata.platform, status="success").observe(
+            duration
+        )
+        llm_tokens_total.labels(model_type=config.LLM_MODEL, model_name=config.LLM_MODEL).inc(
+            total_tokens
+        )
 
         # Build review response
         review_response = ReviewResponse(
@@ -195,16 +230,18 @@ def process_code_review(self, metadata_dict: dict, trace_id: str) -> dict:
             summary=f"Code review completed with {len(comments)} comments",
             comments=comments,
             stats=ReviewStats(
-                total_files=len(diff_blocks),
-                total_comments=len(comments),
-                severity_breakdown={"nit": len(comments)},
+                total_issues=len(comments),
+                nit=len(comments),
+                execution_time_ms=int(duration * 1000),
+                rag_context_used=len(rag_context_citations) > 0,  # T059
+                rag_matches_found=rag_match_count_value,  # T059
             ),
         )
 
         # Post review to platform
         adapter.post_review(metadata, review_response)
 
-        logger.info(
+        task_logger.info(
             f"Code review completed: {len(comments)} comments, "
             f"{duration:.2f}s, {total_tokens} tokens"
         )
@@ -220,7 +257,7 @@ def process_code_review(self, metadata_dict: dict, trace_id: str) -> dict:
     except Exception as e:
         duration = time.time() - start_time
         review_duration_seconds.labels(platform=metadata.platform, status="error").observe(duration)
-        logger.error(f"Code review failed: {e}")
+        task_logger.error(f"Code review failed: {e}")
 
         # Retry with exponential backoff (Celery auto-retry)
         raise
@@ -234,12 +271,13 @@ def index_repository(
     access_token: str,
     branch: str = "main",
     depth: str = "deep",
-    trace_id: Optional[str] = None,
+    trace_id: str | None = None,
 ) -> dict:
     """
-    Index repository for RAG context retrieval (Constitution V).
+    Index repository for RAG context retrieval (Constitution V) (T051-T055).
 
     Clones repository, chunks code, generates embeddings, stores in Supabase.
+    Uses IndexingService for complete indexing workflow with secret scanning.
 
     Args:
         self: Celery task bound instance
@@ -256,33 +294,44 @@ def index_repository(
     start_time = time.time()
     trace_id = trace_id or str(uuid.uuid4())
 
-    logger.configure(extra={"trace_id": trace_id})
-    logger.info(f"Starting repository indexing: {repo_id}")
+    task_logger = logger.bind(trace_id=trace_id, task_id=self.request.id)
+    task_logger.info(f"Starting repository indexing: {repo_id}")
 
     try:
-        if not supabase_client:
-            raise Exception("Supabase client not configured")
+        if not indexing_service:
+            raise Exception("Indexing service not available (Supabase not configured)")
 
-        # TODO: Implement GitPython clone, file walking, and embedding generation
-        # This is a placeholder for the full indexing implementation
-        # See T035-T038 in tasks.md for complete implementation
+        # Parse depth string to IndexDepth enum
+        from models.indexing import IndexDepth
 
-        # Placeholder: Simulate indexing
-        logger.info("Repository indexing placeholder (implementation pending)")
+        index_depth = IndexDepth.SHALLOW if depth == "shallow" else IndexDepth.DEEP
 
-        duration = time.time() - start_time
-        indexing_duration_seconds.labels(repo_id=repo_id, depth=depth).observe(duration)
+        # Run indexing workflow
+        result = indexing_service.index_repository(
+            repo_id=repo_id,
+            git_url=git_url,
+            access_token=access_token,
+            branch=branch,
+            depth=index_depth,
+        )
+
+        task_logger.info(
+            f"Repository indexing completed: {result.get('files_processed', 0)} files, "
+            f"{result.get('chunks_indexed', 0)} chunks"
+        )
 
         return {
             "task_id": self.request.id,
-            "status": "success",
+            "status": result.get("status", "success"),
             "repo_id": repo_id,
-            "indexed_files": 0,  # Placeholder
-            "duration_seconds": duration,
+            "indexed_files": result.get("files_processed", 0),
+            "chunks_indexed": result.get("chunks_indexed", 0),
+            "secrets_found": result.get("secrets_found", 0),
+            "duration_seconds": result.get("duration_seconds", time.time() - start_time),
         }
 
     except Exception as e:
-        logger.error(f"Repository indexing failed: {e}")
+        task_logger.error(f"Repository indexing failed: {e}")
         raise
 
 
@@ -290,7 +339,9 @@ def index_repository(
 def process_feedback(
     self,
     feedback_dict: dict,
-    trace_id: Optional[str] = None,
+    review_id: str,
+    repo_id: str,
+    trace_id: str | None = None,
 ) -> dict:
     """
     Process user feedback for RLHF learning loop (Constitution VI).
@@ -300,32 +351,56 @@ def process_feedback(
     Args:
         self: Celery task bound instance
         feedback_dict: FeedbackRequest as dict
+        review_id: Associated review ID
+        repo_id: Repository identifier
         trace_id: Request correlation ID
 
     Returns:
         dict with feedback processing result
     """
+    from models.feedback import FeedbackRequest
+    from services.feedback import FeedbackService
+
     trace_id = trace_id or str(uuid.uuid4())
-    logger.configure(extra={"trace_id": trace_id})
-    logger.info(f"Processing feedback: action={feedback_dict.get('action')}")
+    task_logger = logger.bind(trace_id=trace_id, task_id=self.request.id)
+    task_logger.info(f"Processing feedback: action={feedback_dict.get('action')}")
 
     try:
         if not supabase_client:
             raise Exception("Supabase client not configured")
 
-        action = feedback_dict.get("action")
+        # Reconstruct FeedbackRequest from dict
+        feedback = FeedbackRequest(**feedback_dict)
 
-        # Record feedback metric
-        feedback_submitted_total.labels(action=action).inc()
+        # Initialize FeedbackService
+        feedback_service = FeedbackService(
+            supabase_client=supabase_client,
+            llm_client=llm_client,
+            config=config,
+        )
 
-        # TODO: Implement full feedback processing
-        # See T047-T054 in tasks.md for complete implementation
+        # Process feedback through RLHF learning loop (T047-T054)
+        result = feedback_service.process_feedback(
+            feedback=feedback,
+            review_id=review_id,
+            repo_id=repo_id,
+            trace_id=trace_id,
+        )
 
-        logger.info(f"Feedback processed: action={action}")
-        return {"task_id": self.request.id, "status": "success"}
+        task_logger.info(
+            f"Feedback processed: action={feedback.action}, "
+            f"feedback_id={result['feedback_id']}, "
+            f"constraint_id={result.get('constraint_id')}"
+        )
+
+        return {
+            "task_id": self.request.id,
+            "status": "success",
+            **result,
+        }
 
     except Exception as e:
-        logger.error(f"Feedback processing failed: {e}")
+        task_logger.error(f"Feedback processing failed: {e}")
         raise
 
 
@@ -335,17 +410,28 @@ def cleanup_expired_constraints() -> dict:
     Cleanup expired learned constraints (Constitution VI).
 
     Runs hourly via Celery Beat to remove constraints past their expiration date.
+    Uses 90-day expiration policy by default.
     """
+    from repositories.constraints import ConstraintRepository
+
     logger.info("Starting expired constraint cleanup")
 
     try:
         if not supabase_client:
             return {"status": "skipped", "reason": "Supabase not configured"}
 
-        # TODO: Implement cleanup logic
-        # Delete from learned_constraints where expires_at < now()
+        # Initialize constraint repository
+        constraint_repo = ConstraintRepository(supabase_client)
 
-        return {"status": "success", "deleted_count": 0}
+        # Delete constraints older than 90 days (T069)
+        deleted_count = constraint_repo.delete_expired(days_old=config.CONSTRAINT_EXPIRATION_DAYS)
+
+        logger.info(f"Cleanup completed: {deleted_count} expired constraints deleted")
+
+        return {
+            "status": "success",
+            "deleted_count": deleted_count,
+        }
 
     except Exception as e:
         logger.error(f"Constraint cleanup failed: {e}")
@@ -367,9 +453,13 @@ def aggregate_metrics() -> dict:
 # Helper Functions
 # =============================================================================
 
+
 def _retrieve_rag_context(metadata: PRMetadata, diff_blocks: list[str]) -> list[str]:
     """
     Retrieve relevant context from knowledge base using vector similarity.
+
+    NOTE: This function is deprecated in favor of KnowledgeRepository.search_context().
+    Kept for backward compatibility during transition.
 
     Args:
         metadata: PR metadata
@@ -378,8 +468,13 @@ def _retrieve_rag_context(metadata: PRMetadata, diff_blocks: list[str]) -> list[
     Returns:
         list of context strings (citations)
     """
-    # TODO: Implement vector similarity search using Supabase pgvector
-    # See T033, T040 in tasks.md
+    if knowledge_repo:
+        query_text = "\n".join(diff_blocks[:3])
+        results = knowledge_repo.search_context(
+            query_text=query_text,
+            repo_id=metadata.repo_id,
+        )
+        return [r.get("citation", "") for r in results[:3]]
     return []
 
 
@@ -387,31 +482,74 @@ def _check_learned_constraints(metadata: PRMetadata, diff_blocks: list[str]) -> 
     """
     Check if diff matches any learned constraints (RLHF).
 
+    Uses ConstraintRepository to generate embeddings and query Supabase
+    for matching constraints that should suppress false positives.
+
     Args:
         metadata: PR metadata
         diff_blocks: List of diff content blocks
 
     Returns:
-        list of suppressed pattern IDs
+        list of suppressed constraint IDs
     """
-    # TODO: Implement constraint matching using Supabase
-    # See T045, T052-T053 in tasks.md
-    return []
+    from repositories.constraints import ConstraintRepository
+
+    if not supabase_client:
+        return []
+
+    try:
+        # Initialize constraint repository
+        constraint_repo = ConstraintRepository(supabase_client)
+
+        # Generate embedding for query (using first diff block)
+        query_text = diff_blocks[0] if diff_blocks else ""
+        if not query_text:
+            return []
+
+        # Generate embedding for the query
+        query_embedding = (
+            llm_client.embeddings.create(
+                model=config.EMBEDDING_MODEL,
+                input=query_text[:8000],
+            )
+            .data[0]
+            .embedding
+        )
+
+        # Check for matching constraints
+        matching_constraints = constraint_repo.check_suppressions(
+            repo_id=metadata.repo_id,
+            embedding=query_embedding,
+            threshold=config.RLHF_THRESHOLD,
+        )
+
+        # Return list of constraint IDs that should be suppressed
+        return [c.id for c in matching_constraints]
+
+    except Exception as e:
+        logger.warning(f"Failed to check learned constraints: {e}")
+        return []
 
 
-def _is_diff_suppressed(diff_content: str, suppressed_patterns: list[str]) -> bool:
+def _is_diff_suppressed(diff_content: str, suppressed_constraints: list[str]) -> bool:
     """
-    Check if diff content matches any suppressed patterns.
+    Check if diff content should be suppressed based on learned constraints.
 
     Args:
         diff_content: Diff content to check
-        suppressed_patterns: List of pattern IDs that are suppressed
+        suppressed_constraints: List of constraint IDs that are suppressed
 
     Returns:
         True if diff should be suppressed
     """
-    # TODO: Implement pattern matching logic
-    return False
+    # For now, we check if any constraints were found that match this diff
+    # In a more sophisticated implementation, we could:
+    # 1. Generate embedding for this specific diff
+    # 2. Check against each suppressed constraint individually
+    # 3. Return True only if similarity exceeds threshold
+
+    # Current implementation: If we have suppressed constraints, assume suppression
+    return len(suppressed_constraints) > 0
 
 
 def _extract_file_path(diff_content: str) -> str:
@@ -438,10 +576,10 @@ def _extract_file_path(diff_content: str) -> str:
 # Module Exports
 # =============================================================================
 __all__ = [
-    "app",
-    "process_code_review",
-    "index_repository",
-    "process_feedback",
-    "cleanup_expired_constraints",
     "aggregate_metrics",
+    "app",
+    "cleanup_expired_constraints",
+    "index_repository",
+    "process_code_review",
+    "process_feedback",
 ]

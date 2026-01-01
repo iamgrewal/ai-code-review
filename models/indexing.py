@@ -4,8 +4,10 @@ Indexing models for CortexReview.
 Defines data structures for repository indexing operations.
 """
 
-from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from enum import Enum
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class IndexDepth(str, Enum):
@@ -23,13 +25,8 @@ class IndexingRequest(BaseModel):
     large files, generates embeddings, and stores them in Supabase.
     """
 
-    git_url: str = Field(..., description="Git repository HTTPS URL")
-    access_token: str = Field(..., min_length=1, description="Personal access token for cloning")
-    branch: str = Field(default="main", description="Branch to index")
-    index_depth: IndexDepth = Field(default=IndexDepth.DEEP, description="Indexing mode")
-
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "examples": [
                 {
                     "git_url": "https://github.com/owner/repo.git",
@@ -39,6 +36,12 @@ class IndexingRequest(BaseModel):
                 }
             ]
         }
+    )
+
+    git_url: str = Field(..., description="Git repository HTTPS URL")
+    access_token: str = Field(..., min_length=1, description="Personal access token for cloning")
+    branch: str = Field(default="main", description="Branch to index")
+    index_depth: IndexDepth = Field(default=IndexDepth.DEEP, description="Indexing mode")
 
 
 class IndexingProgress(BaseModel):
@@ -59,4 +62,4 @@ class IndexingProgress(BaseModel):
     total_files: int = Field(default=0, ge=0, description="Estimated total files")
     chunks_indexed: int = Field(default=0, ge=0, description="Number of chunks embedded")
     percentage: float = Field(default=0.0, ge=0.0, le=100.0, description="Progress percentage")
-    error_message: Optional[str] = Field(None, description="Error message if failed")
+    error_message: str | None = Field(None, description="Error message if failed")

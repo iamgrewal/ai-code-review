@@ -5,7 +5,6 @@ Configures Celery for async task processing with Redis broker,
 result backend, retry settings, and task time limits (Constitution VII).
 """
 
-import os
 from datetime import timedelta
 
 from celery import Celery
@@ -39,7 +38,6 @@ app.conf.update(
     broker_connection_retry_on_startup=True,
     broker_connection_max_retries=5,
     broker_connection_retry_delay=5,  # seconds
-
     # -------------------------------------------------------------------------
     # Task Configuration
     # -------------------------------------------------------------------------
@@ -49,18 +47,15 @@ app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     enable_utc=True,
-
     # Task time limits (Constitution VII - prevent runaway tasks)
     task_time_limit=config.CELERY_TASK_TIME_LIMIT,  # Hard limit (5 minutes default)
     task_soft_time_limit=int(config.CELERY_TASK_TIME_LIMIT * 0.8),  # Soft limit (80%)
     task_acks_late=True,  # Acknowledge after task completion (for reliability)
-
     # -------------------------------------------------------------------------
     # Result Backend Configuration
     # -------------------------------------------------------------------------
     result_expires=timedelta(hours=24),  # Results expire after 24 hours
     result_extended=True,  # Store extended result info (trace_id, status)
-
     # -------------------------------------------------------------------------
     # Retry Configuration (Constitution VII - Exponential Backoff)
     # -------------------------------------------------------------------------
@@ -73,14 +68,12 @@ app.conf.update(
     task_retry_backoff=True,  # Enable exponential backoff
     task_retry_backoff_max=600,  # Maximum backoff (10 minutes)
     task_retry_jitter=True,  # Add jitter to prevent thundering herd
-
     # -------------------------------------------------------------------------
     # Worker Configuration
     # -------------------------------------------------------------------------
     worker_prefetch_multiplier=1,  # Disable prefetch (one task at a time)
     worker_max_tasks_per_child=100,  # Restart worker after 100 tasks (memory cleanup)
     worker_concurrency=config.CELERY_WORKER_CONCURRENCY,
-
     # -------------------------------------------------------------------------
     # Task Routing (Optional - for future scaling)
     # -------------------------------------------------------------------------
@@ -92,13 +85,11 @@ app.conf.update(
     task_default_queue="default",
     task_default_exchange="default",
     task_default_routing_key="default",
-
     # -------------------------------------------------------------------------
     # Dead Letter Queue (Constitution VII - Failed Task Handling)
     # -------------------------------------------------------------------------
     task_reject_on_worker_lost=True,  # Reject tasks if worker crashes
     task_send_sent_event=True,  # Track task sending events
-
     # -------------------------------------------------------------------------
     # Monitoring and Observability (Constitution XI)
     # -------------------------------------------------------------------------
@@ -106,12 +97,11 @@ app.conf.update(
     task_send_event_props=True,  # Include task properties in events
     task_track_started=True,  # Track task start time
     task_compression="gzip",  # Compress large task payloads
-
     # -------------------------------------------------------------------------
     # Security
     # -------------------------------------------------------------------------
     broker_use_ssl=None,  # Set to True for SSL connections
-    result_backend_transport_options=None,  # Configure SSL if needed
+    result_backend_transport_options={},  # Configure SSL if needed
 )
 
 # -----------------------------------------------------------------------------
@@ -142,6 +132,7 @@ app.conf.beat_schedule = {
 # Tasks will be registered when worker.py imports this module
 # Tasks are defined in worker.py and auto-discovered by Celery
 
+
 # -----------------------------------------------------------------------------
 # Application Boot Events
 # -----------------------------------------------------------------------------
@@ -162,7 +153,7 @@ def setup_periodic_tasks(sender, **kwargs):
             "result_backend": config.CELERY_RESULT_BACKEND,
             "worker_concurrency": config.CELERY_WORKER_CONCURRENCY,
             "task_time_limit": config.CELERY_TASK_TIME_LIMIT,
-        }
+        },
     )
 
 
@@ -219,9 +210,7 @@ def get_queue_depth(queue_name: str = "default") -> int:
     from celery import current_app
 
     with current_app.connection_or_acquire() as conn:
-        return conn.default_channel.queue_declare(
-            queue=queue_name, passive=True
-        ).message_count
+        return conn.default_channel.queue_declare(queue=queue_name, passive=True).message_count
 
 
 def get_active_tasks() -> list:
@@ -243,14 +232,16 @@ def get_active_tasks() -> list:
     all_active = []
     for worker, tasks in active.items():
         for task in tasks:
-            all_active.append({
-                "worker": worker,
-                "task_id": task["id"],
-                "task_name": task["name"],
-                "args": task["args"],
-                "kwargs": task["kwargs"],
-                "time_start": task.get("time_start"),
-            })
+            all_active.append(
+                {
+                    "worker": worker,
+                    "task_id": task["id"],
+                    "task_name": task["name"],
+                    "args": task["args"],
+                    "kwargs": task["kwargs"],
+                    "time_start": task.get("time_start"),
+                }
+            )
 
     return all_active
 
@@ -260,7 +251,7 @@ def get_active_tasks() -> list:
 # -----------------------------------------------------------------------------
 __all__ = [
     "app",
-    "get_task_info",
-    "get_queue_depth",
     "get_active_tasks",
+    "get_queue_depth",
+    "get_task_info",
 ]

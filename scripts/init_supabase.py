@@ -51,7 +51,6 @@ SQL_STATEMENTS = [
     -- Enable uuid-ossp for UUID generation
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     """,
-
     # ============================================================================
     # RAG Knowledge Base Table
     # ============================================================================
@@ -107,7 +106,6 @@ SQL_STATEMENTS = [
         FOR EACH ROW
         EXECUTE FUNCTION update_knowledge_base_updated_at();
     """,
-
     # ============================================================================
     # Learned Constraints Table (RLHF)
     # ============================================================================
@@ -152,7 +150,6 @@ SQL_STATEMENTS = [
     ON learned_constraints(repo_id, confidence_score DESC)
     WHERE expires_at IS NULL OR expires_at > NOW();
     """,
-
     # ============================================================================
     # Feedback Audit Log Table
     # ============================================================================
@@ -202,11 +199,9 @@ SQL_STATEMENTS = [
     CREATE INDEX IF NOT EXISTS feedback_audit_log_action_idx
     ON feedback_audit_log(action);
     """,
-
     # ============================================================================
     # Helper Functions
     # ============================================================================
-
     """
     -- Function: Cleanup expired constraints
     -- Called by Celery beat task daily
@@ -279,7 +274,9 @@ def main():
 
     try:
         # Connect to Supabase PostgreSQL
-        logger.info(f"Connecting to Supabase at {SUPABASE_DB_URL.split('@')[1] if '@' in SUPABASE_DB_URL else 'localhost'}")
+        logger.info(
+            f"Connecting to Supabase at {SUPABASE_DB_URL.split('@')[1] if '@' in SUPABASE_DB_URL else 'localhost'}"
+        )
         conn = psycopg2.connect(SUPABASE_DB_URL)
         conn.autocommit = True
         cursor = conn.cursor()

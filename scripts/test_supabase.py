@@ -19,7 +19,7 @@ from pathlib import Path
 import psycopg2
 from dotenv import load_dotenv
 from loguru import logger
-from supabase import create_client, Client
+from supabase import Client, create_client
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -158,7 +158,9 @@ def test_vector_operations():
         """)
         result = cursor.fetchone()
         if result:
-            logger.success(f"Vector similarity query executed: {result[0] if result[0] else 'no data'}")
+            logger.success(
+                f"Vector similarity query executed: {result[0] if result[0] else 'no data'}"
+            )
         else:
             logger.info("Vector similarity query syntax valid (no data in table)")
 

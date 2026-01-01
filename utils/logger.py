@@ -36,9 +36,7 @@ class InterceptHandler(logging.Handler):
             frame = frame.f_back
             depth += 1
 
-        logger.opt(depth=depth, exception=record.exc_info).log(
-            level, record.getMessage()
-        )
+        logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
 
 
 def structured_formatter(record: dict[str, Any]) -> str:
@@ -194,26 +192,36 @@ def setup_logging(log_level: str = "INFO") -> None:
         # -------------------------------------------------------------------------
         # File Handler: Structured JSON for log aggregation (Constitution XI)
         # -------------------------------------------------------------------------
-        logger.add(
-            sink="./logs/app.log",
-            format=structured_formatter,
-            level="DEBUG",
-            rotation="10 MB",
-            retention="10 days",
-            compression="zip",
-            enqueue=True,  # Thread-safe logging
-        )
+        # Gracefully handle permission errors (e.g., in containerized environments)
+        try:
+            logger.add(
+                sink="./logs/app.log",
+                format="{message}",  # Raw message - structured JSON added via bind()
+                level="DEBUG",
+                rotation="10 MB",
+                retention="10 days",
+                compression="zip",
+                enqueue=True,  # Thread-safe logging
+                serialize=True,  # Enable JSON serialization
+            )
+        except (PermissionError, OSError) as e:
+            # Fall back to console-only logging if file logging fails
+            logger.warning(f"File logging disabled due to permission error: {e}")
 
         # Optional: Separate file for errors
-        logger.add(
-            sink="./logs/error.log",
-            format=structured_formatter,
-            level="ERROR",
-            rotation="10 MB",
-            retention="30 days",
-            compression="zip",
-            enqueue=True,
-        )
+        try:
+            logger.add(
+                sink="./logs/error.log",
+                format="{message}",  # Raw message - structured JSON added via bind()
+                level="ERROR",
+                rotation="10 MB",
+                retention="30 days",
+                compression="zip",
+                enqueue=True,
+                serialize=True,  # Enable JSON serialization
+            )
+        except (PermissionError, OSError) as e:
+            logger.warning(f"Error file logging disabled due to permission error: {e}")
 
         logger.opt(colors=True)
 
@@ -246,9 +254,9 @@ def get_logger(trace_id: str = None, **kwargs):
 # Module Exports
 # =============================================================================
 __all__ = [
+    "InterceptHandler",
+    "get_logger",
     "logger",
     "setup_logging",
-    "get_logger",
     "structured_formatter",
-    "InterceptHandler",
 ]

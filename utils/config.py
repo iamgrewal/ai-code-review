@@ -6,7 +6,6 @@ with Phase 2 variables for Celery, Supabase, and observability.
 """
 
 import os
-from typing import Optional
 
 from loguru import logger
 from pydantic import Field, field_validator
@@ -16,10 +15,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Webhook(BaseSettings):
     """Configuration for optional notification webhooks."""
 
-    url: Optional[str] = None
-    header_name: Optional[str] = None
-    header_value: Optional[str] = None
-    request_body: Optional[str] = None
+    url: str | None = None
+    header_name: str | None = None
+    header_value: str | None = None
+    request_body: str | None = None
 
     @property
     def is_init(self) -> bool:
@@ -58,18 +57,17 @@ class Config(BaseSettings):
     GITEA_HOST: str = Field(..., description="Gitea server host (e.g., server:3000)")
 
     # GitHub Configuration
-    GITHUB_TOKEN: Optional[str] = Field(default=None, description="GitHub API token")
+    GITHUB_TOKEN: str | None = Field(default=None, description="GitHub API token")
 
     # -------------------------------------------------------------------------
     # LLM Configuration
     # -------------------------------------------------------------------------
     # Primary LLM API key (highest priority)
-    LLM_API_KEY: Optional[str] = Field(default=None, description="Primary LLM API key")
+    LLM_API_KEY: str | None = Field(default=None, description="Primary LLM API key")
 
     # Custom LLM endpoint URL
-    LLM_BASE_URL: Optional[str] = Field(
-        default=None,
-        description="Custom LLM endpoint URL (for local LLMs or enterprise proxies)"
+    LLM_BASE_URL: str | None = Field(
+        default=None, description="Custom LLM endpoint URL (for local LLMs or enterprise proxies)"
     )
 
     # Model configuration
@@ -79,59 +77,55 @@ class Config(BaseSettings):
 
     # Embedding model for RAG
     EMBEDDING_MODEL: str = Field(
-        default="text-embedding-3-small",
-        description="Embedding model for RAG context retrieval"
+        default="text-embedding-3-small", description="Embedding model for RAG context retrieval"
     )
 
     # Legacy Compatibility (fallback)
-    OPENAI_KEY: Optional[str] = Field(default=None, description="Legacy OpenAI API key (deprecated)")
-    COPILOT_TOKEN: Optional[str] = Field(default=None, description="Legacy Copilot token")
+    OPENAI_KEY: str | None = Field(default=None, description="Legacy OpenAI API key (deprecated)")
+    COPILOT_TOKEN: str | None = Field(default=None, description="Legacy Copilot token")
 
     # -------------------------------------------------------------------------
     # Celery Configuration (Phase 2)
     # -------------------------------------------------------------------------
     CELERY_BROKER_URL: str = Field(
-        default="redis://redis:6379/0",
-        description="Celery broker URL (Redis connection string)"
+        default="redis://redis:6379/0", description="Celery broker URL (Redis connection string)"
     )
     CELERY_RESULT_BACKEND: str = Field(
         default="redis://redis:6379/0",
-        description="Celery result backend URL (Redis connection string)"
+        description="Celery result backend URL (Redis connection string)",
     )
-    CELERY_WORKER_CONCURRENCY: int = Field(default=4, description="Number of Celery worker processes")
-    CELERY_TASK_TIME_LIMIT: int = Field(default=300, description="Celery task time limit in seconds")
+    CELERY_WORKER_CONCURRENCY: int = Field(
+        default=4, description="Number of Celery worker processes"
+    )
+    CELERY_TASK_TIME_LIMIT: int = Field(
+        default=300, description="Celery task time limit in seconds"
+    )
 
     # -------------------------------------------------------------------------
     # Supabase Configuration (Phase 2)
     # -------------------------------------------------------------------------
-    SUPABASE_URL: Optional[str] = Field(default=None, description="Supabase project URL")
-    SUPABASE_SERVICE_KEY: Optional[str] = Field(
-        default=None,
-        description="Supabase service role key for database operations"
+    SUPABASE_URL: str | None = Field(default=None, description="Supabase project URL")
+    SUPABASE_SERVICE_KEY: str | None = Field(
+        default=None, description="Supabase service role key for database operations"
     )
-    SUPABASE_DB_URL: Optional[str] = Field(
-        default=None,
-        description="Direct PostgreSQL connection string (for migrations/scripting)"
+    SUPABASE_DB_URL: str | None = Field(
+        default=None, description="Direct PostgreSQL connection string (for migrations/scripting)"
     )
 
     # -------------------------------------------------------------------------
     # Webhook Signature Verification (Phase 2)
     # -------------------------------------------------------------------------
-    PLATFORM_GITHUB_WEBHOOK_SECRET: Optional[str] = Field(
-        default=None,
-        description="GitHub webhook secret for HMAC-SHA256 signature verification"
+    PLATFORM_GITHUB_WEBHOOK_SECRET: str | None = Field(
+        default=None, description="GitHub webhook secret for HMAC-SHA256 signature verification"
     )
-    PLATFORM_GITEA_WEBHOOK_SECRET: Optional[str] = Field(
-        default=None,
-        description="Gitea webhook secret for HMAC-SHA256 signature verification"
+    PLATFORM_GITEA_WEBHOOK_SECRET: str | None = Field(
+        default=None, description="Gitea webhook secret for HMAC-SHA256 signature verification"
     )
     PLATFORM_GITHUB_VERIFY_SIGNATURE: bool = Field(
-        default=True,
-        description="Enable GitHub webhook signature verification"
+        default=True, description="Enable GitHub webhook signature verification"
     )
     PLATFORM_GITEA_VERIFY_SIGNATURE: bool = Field(
-        default=True,
-        description="Enable Gitea webhook signature verification"
+        default=True, description="Enable Gitea webhook signature verification"
     )
 
     # -------------------------------------------------------------------------
@@ -139,22 +133,13 @@ class Config(BaseSettings):
     # -------------------------------------------------------------------------
     RAG_ENABLED: bool = Field(default=True, description="Enable RAG context-aware reviews")
     RAG_THRESHOLD: float = Field(
-        default=0.75,
-        ge=0.0,
-        le=1.0,
-        description="RAG similarity threshold for context matching"
+        default=0.75, ge=0.0, le=1.0, description="RAG similarity threshold for context matching"
     )
     RAG_MATCH_COUNT_MIN: int = Field(
-        default=3,
-        ge=1,
-        le=10,
-        description="Minimum RAG match count for context retrieval"
+        default=3, ge=1, le=10, description="Minimum RAG match count for context retrieval"
     )
     RAG_MATCH_COUNT_MAX: int = Field(
-        default=10,
-        ge=1,
-        le=50,
-        description="Maximum RAG match count for context retrieval"
+        default=10, ge=1, le=50, description="Maximum RAG match count for context retrieval"
     )
 
     # -------------------------------------------------------------------------
@@ -162,17 +147,11 @@ class Config(BaseSettings):
     # -------------------------------------------------------------------------
     RLHF_ENABLED: bool = Field(default=True, description="Enable RLHF learning loop")
     RLHF_THRESHOLD: float = Field(
-        default=0.8,
-        ge=0.0,
-        le=1.0,
-        description="RLHF similarity threshold for constraint matching"
+        default=0.8, ge=0.0, le=1.0, description="RLHF similarity threshold for constraint matching"
     )
     FEEDBACK_ENABLED: bool = Field(default=True, description="Enable feedback processing")
     CONSTRAINT_EXPIRATION_DAYS: int = Field(
-        default=90,
-        ge=1,
-        le=365,
-        description="Learned constraint expiration in days"
+        default=90, ge=1, le=365, description="Learned constraint expiration in days"
     )
 
     # -------------------------------------------------------------------------
@@ -187,13 +166,13 @@ class Config(BaseSettings):
     # -------------------------------------------------------------------------
     IGNORED_FILE_SUFFIX: str = Field(
         default=".json,.md,.lock",
-        description="Comma-separated file extensions to skip during code review"
+        description="Comma-separated file extensions to skip during code review",
     )
 
     # -------------------------------------------------------------------------
     # Optional Webhook (nested model)
     # -------------------------------------------------------------------------
-    webhook: Optional[Webhook] = Field(default=None, description="Notification webhook configuration")
+    webhook: Webhook | None = Field(default=None, description="Notification webhook configuration")
 
     # -------------------------------------------------------------------------
     # Post-processing and Validation
@@ -226,9 +205,12 @@ class Config(BaseSettings):
             if webhook_url:
                 self.webhook = Webhook(
                     url=webhook_url,
-                    header_name=kwargs.get("webhook_header_name") or os.getenv("WEBHOOK_HEADER_NAME"),
-                    header_value=kwargs.get("webhook_header_value") or os.getenv("WEBHOOK_HEADER_VALUE"),
-                    request_body=kwargs.get("webhook_request_body") or os.getenv("WEBHOOK_REQUEST_BODY"),
+                    header_name=kwargs.get("webhook_header_name")
+                    or os.getenv("WEBHOOK_HEADER_NAME"),
+                    header_value=kwargs.get("webhook_header_value")
+                    or os.getenv("WEBHOOK_HEADER_VALUE"),
+                    request_body=kwargs.get("webhook_request_body")
+                    or os.getenv("WEBHOOK_REQUEST_BODY"),
                 )
 
                 # Warn if webhook configuration is incomplete
@@ -278,8 +260,7 @@ class Config(BaseSettings):
         if self.RAG_ENABLED or self.RLHF_ENABLED:
             if not self.SUPABASE_URL or not self.SUPABASE_SERVICE_KEY:
                 logger.warning(
-                    "Supabase configuration is missing. "
-                    "RAG and RLHF features will be disabled."
+                    "Supabase configuration is missing. RAG and RLHF features will be disabled."
                 )
                 self.RAG_ENABLED = False
                 self.RLHF_ENABLED = False
@@ -293,6 +274,6 @@ class Config(BaseSettings):
         return self.LLM_BASE_URL or "https://api.openai.com/v1"
 
     @property
-    def effective_llm_api_key(self) -> Optional[str]:
+    def effective_llm_api_key(self) -> str | None:
         """Get the effective LLM API key after priority resolution."""
         return self.LLM_API_KEY

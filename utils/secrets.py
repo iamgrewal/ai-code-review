@@ -8,7 +8,6 @@ secrets from being stored in vector database.
 
 import re
 from enum import Enum
-from typing import Optional
 
 
 class SecretType(str, Enum):
@@ -101,9 +100,7 @@ TOKEN_PATTERNS = [
 ]
 
 # JWT tokens
-JWT_PATTERN = re.compile(
-    r"eyJ[A-Za-z0-9_\-]*\.[A-Za-z0-9_\-]*\.[A-Za-z0-9_\-]*"
-)
+JWT_PATTERN = re.compile(r"eyJ[A-Za-z0-9_\-]*\.[A-Za-z0-9_\-]*\.[A-Za-z0-9_\-]*")
 
 # Certificate patterns
 CERTIFICATE_PATTERNS = [
@@ -114,9 +111,7 @@ CERTIFICATE_PATTERNS = [
 # Database URL patterns
 DATABASE_URL_PATTERNS = [
     # postgresql://user:password@host:port/db
-    re.compile(
-        r"(?i)(postgres|mysql|mongodb|redis)://[A-Za-z0-9_\-]+:[^\s@']{8,}@[^/\s']+"
-    ),
+    re.compile(r"(?i)(postgres|mysql|mongodb|redis)://[A-Za-z0-9_\-]+:[^\s@']{8,}@[^/\s']+"),
     # DATABASE_URL = "postgresql://..."
     re.compile(
         r"(?i)(database[_-]?url|db_url|db[_-]?connection)\s*[:=]\s*[\"']([^\"']+@[^\s'\"]+)[\"']"
@@ -124,9 +119,7 @@ DATABASE_URL_PATTERNS = [
 ]
 
 # Basic Auth in URLs
-BASIC_AUTH_PATTERN = re.compile(
-    r"(?i)https?://[A-Za-z0-9_\-]+:[^\s@]{8,}@[^\s/]+"
-)
+BASIC_AUTH_PATTERN = re.compile(r"(?i)https?://[A-Za-z0-9_\-]+:[^\s@]{8,}@[^\s/]+")
 
 # Generic secret patterns (heuristic)
 GENERIC_SECRET_PATTERNS = [
@@ -138,6 +131,7 @@ GENERIC_SECRET_PATTERNS = [
 # ============================================================================
 # Secret Scanning Functions
 # ============================================================================
+
 
 def scan_for_secrets(code: str, filename: str = "") -> list[SecretMatch]:
     """
@@ -236,7 +230,9 @@ def scan_for_secrets(code: str, filename: str = "") -> list[SecretMatch]:
                         pattern="TOKEN",
                         line_number=line_number,
                         line_content=line.strip(),
-                        redacted=_redact_line(line, match.group(1) if match.lastindex else match.group(0)),
+                        redacted=_redact_line(
+                            line, match.group(1) if match.lastindex else match.group(0)
+                        ),
                     )
                 )
 
@@ -378,6 +374,7 @@ def _redact_line(line: str, secret: str) -> str:
 # ============================================================================
 # Redaction Functions
 # ============================================================================
+
 
 def redact_secrets(code: str, filename: str = "") -> tuple[str, list[SecretMatch]]:
     """

@@ -48,7 +48,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:3008/docs', timeout=5)" || exit 1
 
 # Run FastAPI application with uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3008", "--workers", "1"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3008", "--workers", "1", "--no-access-log"]
 
 
 # -----------------------------------------------------------------------------

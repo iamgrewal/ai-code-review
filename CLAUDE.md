@@ -1112,3 +1112,9 @@ If upgrading from pre-refactor version:
 - Specification: [`specs/001-prompts-config-refactor/spec.md`](specs/001-prompts-config-refactor/spec.md)
 - Implementation Plan: [`specs/001-prompts-config-refactor/plan.md`](specs/001-prompts-config-refactor/plan.md)
 - Task Breakdown: [`specs/001-prompts-config-refactor/tasks.md`](specs/001-prompts-config-refactor/tasks.md)
+
+## Active Technologies
+- Python 3.11+ (upgraded from 3.10 for async performance improvements) (001-cortexreview-platform)
+
+## Recent Changes
+- 001-cortexreview-platform: Added Python 3.11+ (upgraded from 3.10 for async performance improvements)

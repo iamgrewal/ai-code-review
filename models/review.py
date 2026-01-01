@@ -6,7 +6,8 @@ and review responses with RAG citations.
 """
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from .platform import PRMetadata, ReviewStatus, Severity
@@ -21,11 +22,21 @@ class ReviewConfig(BaseModel):
     """
 
     use_rag_context: bool = Field(default=True, description="Enable RAG context retrieval")
-    apply_learned_suppressions: bool = Field(default=True, description="Apply RLHF learned constraints")
-    severity_threshold: Severity = Field(default=Severity.LOW, description="Minimum severity to include")
-    include_auto_fix_patches: bool = Field(default=False, description="Generate git apply patches for fixes")
-    personas: list[str] = Field(default_factory=list, description="AI personas to apply (e.g., security_expert)")
-    max_context_matches: int = Field(default=10, ge=3, le=10, description="Maximum RAG context matches")
+    apply_learned_suppressions: bool = Field(
+        default=True, description="Apply RLHF learned constraints"
+    )
+    severity_threshold: Severity = Field(
+        default=Severity.LOW, description="Minimum severity to include"
+    )
+    include_auto_fix_patches: bool = Field(
+        default=False, description="Generate git apply patches for fixes"
+    )
+    personas: list[str] = Field(
+        default_factory=list, description="AI personas to apply (e.g., security_expert)"
+    )
+    max_context_matches: int = Field(
+        default=10, ge=3, le=10, description="Maximum RAG context matches"
+    )
 
 
 class ReviewComment(BaseModel):
@@ -46,9 +57,13 @@ class ReviewComment(BaseModel):
     severity: Severity = Field(..., description="Severity level")
     message: str = Field(..., description="Review comment message")
     suggestion: str = Field(default="", description="Suggested fix")
-    confidence_score: float = Field(default=0.5, ge=0.0, le=1.0, description="AI confidence in this comment")
-    fix_patch: Optional[str] = Field(None, description="Optional git apply patch for suggested fix")
-    citations: list[str] = Field(default_factory=list, description="RAG citations (e.g., 'See PR #42')")
+    confidence_score: float = Field(
+        default=0.5, ge=0.0, le=1.0, description="AI confidence in this comment"
+    )
+    fix_patch: str | None = Field(None, description="Optional git apply patch for suggested fix")
+    citations: list[str] = Field(
+        default_factory=list, description="RAG citations (e.g., 'See PR #42')"
+    )
 
 
 class ReviewStats(BaseModel):
@@ -63,7 +78,9 @@ class ReviewStats(BaseModel):
     execution_time_ms: int = Field(..., ge=0, description="Execution time in milliseconds")
     rag_context_used: bool = Field(default=False, description="Whether RAG context was retrieved")
     rag_matches_found: int = Field(default=0, ge=0, description="Number of RAG context matches")
-    rlhf_constraints_applied: int = Field(default=0, ge=0, description="Number of RLHF constraints applied")
+    rlhf_constraints_applied: int = Field(
+        default=0, ge=0, description="Number of RLHF constraints applied"
+    )
     tokens_used: int = Field(default=0, ge=0, description="LLM tokens consumed")
 
 
@@ -92,11 +109,13 @@ class ReviewTask(BaseModel):
     task_id: str = Field(..., description="Celery task UUID")
     status: ReviewStatus = Field(default=ReviewStatus.QUEUED, description="Current task status")
     trace_id: str = Field(..., description="Correlation ID for distributed tracing")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Task creation timestamp")
-    started_at: Optional[datetime] = Field(None, description="Worker start timestamp")
-    completed_at: Optional[datetime] = Field(None, description="Task completion timestamp")
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow, description="Task creation timestamp"
+    )
+    started_at: datetime | None = Field(None, description="Worker start timestamp")
+    completed_at: datetime | None = Field(None, description="Task completion timestamp")
     metadata: PRMetadata = Field(..., description="Normalized PR metadata")
     config: ReviewConfig = Field(..., description="Review configuration")
-    result: Optional[ReviewResponse] = Field(None, description="Final review result")
-    error: Optional[str] = Field(None, description="Error message if failed")
+    result: ReviewResponse | None = Field(None, description="Final review result")
+    error: str | None = Field(None, description="Error message if failed")
     retry_count: int = Field(default=0, ge=0, le=3, description="Number of retry attempts")

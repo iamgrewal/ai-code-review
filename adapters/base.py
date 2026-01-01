@@ -6,7 +6,6 @@ enabling platform-agnostic business logic in the service layer.
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from models.platform import PRMetadata
 from models.review import ReviewResponse
