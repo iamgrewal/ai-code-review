@@ -35,8 +35,9 @@ def get_available_memory_gb() -> float:
             elif line.startswith("MemFree:"):
                 kb = int(line.split()[1])
                 return kb / (1024 * 1024)
-    except Exception:
-        pass
+    except (OSError, ValueError) as exc:
+        # If /proc/meminfo is unavailable or malformed, fall back to sysconf-based estimation below.
+        print(f"Warning: failed to read /proc/meminfo for memory check: {exc}", file=sys.stderr)
 
     # Fallback: use shutil if available
     try:
