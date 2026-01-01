@@ -61,7 +61,7 @@ POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-your_secure_password_here_min_16_chars}"
 POSTGRES_DB="${POSTGRES_DB:-supabase}"
 POSTGRES_HOST="${POSTGRES_HOST:-localhost}"
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
-POSTGRES_USER="${POSTGRES_USER:-supabase_admin}"
+POSTGRES_USER="${POSTGRES_USER:-postgres}"
 TEMPLATE_DB="template1"
 
 # Container name (override if using custom name)

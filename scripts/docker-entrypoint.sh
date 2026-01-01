@@ -118,8 +118,8 @@ run_migrations() {
             migration_name=$(basename "$migration")
             echo_yellow "Applying migration: $migration_name"
 
-            # Execute migration with error handling (use supabase_admin for superuser privileges)
-            if psql -U supabase_admin -d "${POSTGRES_DB:-supabase}" -f "$migration" > /dev/null 2>&1; then
+            # Execute migration with error handling (use postgres superuser or configured POSTGRES_USER)
+            if psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-supabase}" -f "$migration" > /dev/null 2>&1; then
                 echo_green "✓ Applied: $migration_name"
                 migration_count=$((migration_count + 1))
             else
