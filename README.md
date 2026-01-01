@@ -1,198 +1,385 @@
-# Gitea AI Code Reviewer
+# CortexReview Platform
 
-A lightweight, self-hosted AI bot that automatically reviews Pull Requests in Gitea. It listens for webhook events, analyzes code changes using LLMs (OpenAI, Custom Local LLMs, or Copilot), and posts intelligent review comments directly to your PRs.
+**A Self-Learning, Context-Aware AI Code Review Platform** with RAG (Retrieval-Augmented Generation) and RLHF (Reinforcement Learning from Human Feedback).
 
-## 🚀 Features
+CortexReview transforms code review from a stateless checklist into a stateful, intelligent system that learns from your codebase and adapts to your team's patterns. It supports multi-platform operation (GitHub & Gitea), indexes repository history for context-aware reviews, and continuously improves through user feedback.
 
-* **Automated Reviews:** Automatically analyzes new Pull Requests and updates.
-* **External Prompt Management:** Customize the AI's behavior and persona by editing Markdown files without changing the code.
-* **Flexible LLM Configuration:** Support for custom Base URLs, API Keys, and Models via `.env` (compatible with OpenAI, Azure, LocalAI, Ollama, etc.).
-* **Self-Hosted:** Runs entirely on your own infrastructure (Docker or Metal).
-* **Webhook Based:** No complex Gitea Actions runners required; works as a standalone service.
-* **Hot Reload (Docker):** Edit prompts or code locally and see changes immediately without rebuilding the image.
+## 🚀 Key Features
+
+### Phase 2 (Current Release)
+- **Platform Abstraction**: Single codebase supporting both GitHub and Gitea via adapter pattern
+- **Async Processing**: Webhook acknowledgment within 2 seconds with background Celery task processing
+- **Multi-Container Architecture**: API (FastAPI), Worker (Celery), Redis, Prometheus, and Grafana
+
+### Phase 2+ (Roadmap)
+- **Context-Aware Reviews (RAG)**: Index repository history and retrieve relevant context for reviews with citations
+- **Learning Loop (RLHF)**: Accept feedback to suppress false positives and adapt to team-specific patterns
+- **Auto-Fix Patches**: Generate `git apply` compatible patches for simple issues
+- **MCP Integration**: Model Context Protocol support for IDE agents (Cursor, Windsurf)
+- **Observability**: Prometheus metrics and Grafana dashboards for monitoring
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Client Layer                                 │
+├─────────────┬─────────────┬─────────────────────────────────────────────┤
+│   GitHub     │    Gitea    │  IDE Agents (MCP) / REST / CLI           │
+│   Webhooks   │   Webhooks   │                                             │
+└──────┬────────┴──────┬───────┴─────────────────────────────────────────────┘
+       │               │
+       ▼               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    API Gateway (FastAPI)                              │
+│  - Webhook Signature Verification (HMAC-SHA256)                         │
+│  - Platform Adapter Selection                                                │
+│  - 202 Accepted → Celery Task Dispatch                                   │
+└───────┬───────────────────────────────────────┬───────────────────────┘
+        │                                       │
+        ▼                                       ▼
+┌───────────────────┐               ┌───────────────────────────────────────┐
+│  Async Worker      │               │       Knowledge Layer (Supabase)      │
+│  (Celery)          │               │  ┌─────────────┬───────────────────┐  │
+│  - Code Review     │               │  │knowledge_base│  learned_constraints│  │
+│  - RAG Retrieval    │◄─────────────┼─▶ │  (RAG Context)│   (RLHF Filter)   │  │
+│  - RLHF Learning   │               │  └─────────────┴───────────────────┘  │
+│  - Repo Indexing   │               │         PostgreSQL + pgvector          │
+└───────────────────┘               └───────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                         AI Layer                                      │
+│  - OpenAI GPT-4 (LLM)                                                      │
+│  - OpenAI Embeddings (text-embedding-3-small)                               │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
 ## 🛠 Prerequisites
 
-* **Gitea Instance:** Version 1.19+ recommended.
-* **Docker & Docker Compose** (Recommended for deployment).
-* **API Key:** An API key for your preferred LLM provider.
+| Component | Version/Requirement |
+|-----------|---------------------|
+| **Python** | 3.11+ |
+| **Docker** | Latest (with Docker Compose) |
+| **Git Platform** | GitHub (any) or Gitea 1.19+ |
+| **LLM API** | OpenAI-compatible (OpenAI, Azure, Ollama, LocalAI, etc.) |
+| **Vector Database** | Supabase (PostgreSQL + pgvector) |
+| **Message Broker** | Redis 7+ |
 
 ## 📦 Installation & Deployment
 
-### Option 1: Docker Compose (Recommended)
+### Quick Start (Docker Compose)
 
-This setup includes volume mounts for **hot-reloading** prompts and code.
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/bestK/gitea-ai-codereview.git
+   cd gitea-ai-codereview
+   ```
 
-1.  Create a folder structure on your host:
-    ```text
-    /gitea-ai-codereview
-      ├── docker-compose.yml
-      ├── .env
-      ├── main.py       (Optional: If you want to modify source)
-      └── prompts/      (Required: Place your custom prompts here)
-           └── code-review-pr.md
-    ```
+2. **Configure environment variables:**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
 
-2.  Create a `docker-compose.yml` file with the following configuration:
+3. **Start the services:**
+   ```bash
+   docker-compose up -d --build
+   ```
 
-    ```yaml
-    ---
-    services:
-      ai-codereview:
-        build: .
-        container_name: gitea-ai-codereview
-        restart: always
-        env_file: .env
-        networks:
-          gitea_gitea:
-        ports:
-          - "3008:3008"
-        environment:
-          # URL of your Gitea Server (Internal Docker URL if in same network, or Host IP)
-          - GITEA_HOST=http://server:3000
-          # Token you will generate in Step 4
-          - GITEA_TOKEN=${GITEA_TOKEN}
-          # LLM Configuration (Loaded from .env)
-          - LLM_PROVIDER=${LLM_PROVIDER}
-          - LLM_API_KEY=${LLM_API_KEY}
-          - LLM_BASE_URL=${LLM_BASE_URL}
-          - LLM_MODEL=${LLM_MODEL}
-          # Optional Configs
-          - IGNORED_FILE_SUFFIX=${IGNORED_FILE_SUFFIX:-.json,.md,.lock,.png,.jpg,.svg,.map}
-        extra_hosts:
-          - "host.docker.internal:host-gateway" # Helps access host services if needed
-        volumes:
-          # Map source for hot-reloading code changes
-          - ./main.py:/app/main.py
-          # Map prompts folder so you can edit them on the host without rebuilding
-          - ./prompts:/app/prompts
-    networks:
-      gitea_gitea:
-        external: true
-    ```
-
-3.  Create a `.env` file in the same directory to configure your keys:
-
-    ```bash
-    # LLM Configuration
-    LLM_PROVIDER=openai
-    LLM_API_KEY=sk-...
-    LLM_BASE_URL=https://api.openai.com/v1 # Change to local URL if needed (e.g., http://localhost:11434/v1)
-    LLM_MODEL=gpt-4
-
-    # Gitea Configuration
-    GITEA_TOKEN=your_gitea_app_token
-    GITEA_HOST=http://server:3000
-
-    # Optional
-    IGNORED_FILE_SUFFIX=.json,.md,.lock
-    ```
-
-4.  Start the service:
-    ```bash
-    docker-compose up -d --build
-    ```
-
-### Option 2: Local Python Setup
-
-1.  Clone the repository:
-    ```bash
-    git clone https://github.com/bestK/gitea-ai-codereview.git
-    cd gitea-ai-codereview
-    ```
-
-2.  Create a virtual environment and install dependencies:
-    ```bash
-    python -m venv .venv
-    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-    pip install -r requirements.txt
-    ```
-
-3.  Configure environment variables (create a `.env` file):
-    ```ini
-    LLM_PROVIDER=openai
-    LLM_API_KEY=sk-xyz...
-    LLM_BASE_URL=https://api.openai.com/v1
-    LLM_MODEL=gpt-4
-    GITEA_HOST=http://localhost:3000
-    GITEA_TOKEN=your_token_here
-    ```
-
-4.  Ensure you have created the `./prompts/` directory and added your `code-review-pr.md` file.
-
-5.  Run the application:
-    ```bash
-    python main.py
-    ```
-
-## ⚙️ Configuration
-
-The application is configured primarily via the `.env` file and the Prompt files.
+4. **Initialize Supabase schema:**
+   ```bash
+   docker-compose exec api python scripts/init_supabase.py
+   ```
 
 ### Environment Variables
 
-| Variable | Description | Required | Default |
-| --- | --- | --- | --- |
-| **LLM Configuration** |
-| `LLM_PROVIDER` | The provider identifier (e.g., `openai`, `anthropic`, `custom`). | ✅ | `openai` |
-| `LLM_API_KEY` | API Key for your LLM provider. | ✅ | None |
-| `LLM_BASE_URL` | Base URL for the LLM API (Crucial for Local LLMs, Azure, or Proxies). | ❌ | OpenAI Default |
-| `LLM_MODEL` | The model name to use (e.g., `gpt-4o`, `claude-3-opus`, `llama3`). | ✅ | `gpt-4` |
-| **Gitea Configuration** |
-| `GITEA_HOST` | Your Gitea server URL (e.g., `http://192.168.1.50:3000`). | ✅ | None |
-| `GITEA_TOKEN` | Gitea Access Token (Settings -> Applications). | ✅ | None |
-| **Optional** |
-| `IGNORED_FILE_SUFFIX` | Comma-separated list of extensions to skip (e.g., `.json,.md`). | ❌ | None |
-| `COPILOT_TOKEN` | Legacy support: Use this *instead* of `LLM_API_KEY` if using GitHub Copilot. | ❌ | None |
+| Category | Variable | Required | Default |
+|----------|----------|----------|---------|
+| **Git Platform** | `PLATFORM` | ✅ | `gitea` |
+| | `GITEA_HOST` | ✅ (if Gitea) | - |
+| | `GITEA_TOKEN` | ✅ (if Gitea) | - |
+| | `GITHUB_TOKEN` | ✅ (if GitHub) | - |
+| **LLM** | `LLM_API_KEY` | ✅ | - |
+| | `LLM_BASE_URL` | ❌ | `https://api.openai.com/v1` |
+| | `LLM_MODEL` | ❌ | `gpt-4` |
+| **Celery** | `CELERY_BROKER_URL` | ✅ | `redis://redis:6379/0` |
+| | `CELERY_RESULT_BACKEND` | ✅ | `redis://redis:6379/0` |
+| **Supabase** | `SUPABASE_URL` | ✅ | - |
+| | `SUPABASE_SERVICE_KEY` | ✅ | - |
+| **Webhook Secrets** | `PLATFORM_GITHUB_WEBHOOK_SECRET` | ❌ | - |
+| | `PLATFORM_GITEA_WEBHOOK_SECRET` | ❌ | - |
 
-### Customizing the AI Prompt
+See [`.env.example`](.env.example) for all available configuration options.
 
-You can control exactly how the AI reviews your code by editing `./prompts/code-review-pr.md`.
+## 🔗 Connecting Git Platforms
 
-**Features of the Prompt System:**
+### GitHub
 
-*   **Markdown Support:** Write instructions using clean Markdown.
-*   **YAML Front Matter:** You can add metadata at the top of the file (surrounded by `---`). The bot will strip this before sending it to the AI.
-    ```yaml
-    ---
-    mode: 'agent'
-    description: 'Strict Security Reviewer'
-    ---
-    ```
-*   **Variable Substitution:** Inject dynamic values into your prompt using `${variable}` syntax.
-    *   Example in `code-review-pr.md`: `Focus on: ${input-focus}`
-    *   The bot automatically replaces this with the default context defined in the code (e.g., "security, performance, and code quality") or specific context if configured in the future.
+1. Navigate to **Repository Settings** → **Webhooks** → **Add webhook**
+2. **Payload URL:** `https://your-domain.com/v1/webhook/github`
+3. **Content type:** `application/json`
+4. **Secret:** Generate and add to `.env` as `PLATFORM_GITHUB_WEBHOOK_SECRET`
+5. **Events:** Pull requests, Pull request reviews
 
-## 🔗 Connecting to Gitea
+### Gitea
 
-Once the bot is running, you need to tell Gitea to send events to it.
-
-1.  Navigate to your **Repository Settings** (or Organization Settings).
-2.  Click on **Webhooks** > **Add Webhook** > **Gitea**.
-3.  **Target URL:**
-    *   If using Docker Network: `http://gitea-ai-codereview:3008/hook`
-    *   If using distinct servers: `http://YOUR_BOT_IP:3008/hook`
-    *   *(Note: Check `http://localhost:3008/docs` to verify the exact endpoint path if `/hook` fails).*
-4.  **Trigger On:**
-    *   [x] **Pull Request**
-    *   [x] **Pull Request Synchronize** (if available, ensures updates are reviewed)
-5.  Click **Add Webhook**.
+1. Navigate to **Repository Settings** → **Webhooks** → **Add Webhook** → **Gitea**
+2. **Target URL:** `https://your-domain.com/v1/webhook/gitea`
+3. **Secret:** Generate and add to `.env` as `PLATFORM_GITEA_WEBHOOK_SECRET`
+4. **Trigger On:** Pull Request events
 
 ## 📝 Usage
 
-1.  Create a new Branch and push some code.
-2.  Open a **Pull Request** in Gitea.
-3.  The bot will receive the webhook, load the prompt from `./prompts/code-review-pr.md`, fetch the diff, send it to the AI, and post a review comment on the PR timeline automatically.
+### Webhook-Based Reviews
+
+1. Create a branch and commit your changes
+2. Open a Pull Request
+3. CortexReview receives the webhook and returns `202 Accepted`
+4. Review processes asynchronously in background worker
+5. Review comments posted to the PR within ~60 seconds
+
+### REST API
+
+```bash
+# Submit a review directly
+curl -X POST "https://your-domain.com/v1/reviews" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": "local_cli",
+    "diff_content": "diff --git a/file.py b/file.py...",
+    "config": {
+      "use_rag_context": true,
+      "apply_learned_suppressions": true
+    }
+  }'
+```
+
+### Task Status Polling
+
+```bash
+# Check review status
+curl "https://your-domain.com/v1/tasks/{task_id}"
+```
+
+### Repository Indexing (RAG)
+
+```bash
+# Trigger repository indexing for context-aware reviews
+curl -X POST "https://your-domain.com/v1/repositories/{repo_id}/index" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "git_url": "https://github.com/user/repo",
+    "access_token": "ghp_...",
+    "branch": "main",
+    "index_depth": "deep"
+  }'
+```
+
+### Feedback (RLHF)
+
+```bash
+# Submit feedback to improve future reviews
+curl -X POST "https://your-domain.com/v1/reviews/{review_id}/feedback" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "comment_id": "cmt_123",
+    "action": "rejected",
+    "reason": "false_positive",
+    "developer_comment": "This pattern is acceptable in our codebase",
+    "final_code_snapshot": "def example(): ..."
+  }'
+```
+
+## 🔍 Observability
+
+### Prometheus Metrics
+
+Access metrics at `/metrics`:
+- `cortexreview_review_duration_seconds` - Review completion time
+- `cortexreview_rag_retrieval_latency_seconds` - RAG context retrieval
+- `cortexreview_llm_tokens_total` - Token usage by model type
+- `cortexreview_feedback_submitted_total` - RLHF feedback submissions
+
+### Grafana Dashboards
+
+With observability profile enabled:
+```bash
+docker-compose --profile observability up
+```
+
+Access Grafana at `http://localhost:3000` (default: `admin/admin`)
+
+## 🎯 API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | API information |
+| `/health` | GET | Health check |
+| `/docs` | GET | Interactive API documentation (Swagger UI) |
+| `/metrics` | GET | Prometheus metrics |
+| `/mcp/manifest` | GET | MCP manifest for IDE agents |
+| `/v1/webhook/{platform}` | POST | Platform webhook endpoint |
+| `/v1/tasks/{task_id}` | GET | Task status polling |
+| `/v1/repositories/{repo_id}/index` | POST | Trigger repository indexing |
+| `/v1/reviews/{review_id}/feedback` | POST | Submit feedback (RLHF) |
+
+### Legacy Endpoints (Phase 1 Compatibility)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/codereview` | POST | Legacy Gitea webhook (deprecated) |
+| `/test` | POST | Manual testing endpoint (deprecated) |
+
+## ⚙️ Customization
+
+### Prompt Engineering
+
+Edit `./prompts/code-review-pr.md` to customize the AI's behavior:
+
+```markdown
+---
+model: gpt-4
+locale: en_us
+temperature: 0.1
+---
+
+You are a senior software engineer specializing in security and performance.
+
+## Review Focus
+Focus on: ${input-focus}
+
+## Guidelines
+- Flag security vulnerabilities with high severity
+- Suggest performance optimizations
+- Follow the team's coding standards defined in the repository context
+```
+
+### Configuration via Files
+
+The system supports hot-reloading for:
+- **Prompts**: `./prompts/*.md` - AI system prompts
+- **Code**: `main.py` - API changes (development mode)
+
+## 🚀 Development
+
+### Local Development Setup
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Start Redis (required for Celery)
+docker-compose up -d redis
+
+# Start API server
+uvicorn main:app --reload --host 0.0.0.0 --port 3008
+
+# Start Celery worker (separate terminal)
+celery -A celery_app worker --loglevel=info
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=.
+
+# Run specific test module
+pytest tests/unit/test_models.py
+```
+
+## 📖 Documentation
+
+- **[PRD](docs/PRD.md)** - Product Requirements Document
+- **[Architecture](docs/Architecture.md)** - System Architecture
+- **[API Design](docs/API-Design.md)** - API Specification
+- **[Spec Kit Framework](docs/Spec-Kit-Doc-Framework.md)** - Documentation Framework
+
+## 🗺️ Roadmap
+
+### Phase 2 (Current) - Platform Foundation
+- ✅ Pydantic models and data contracts
+- ✅ Platform abstraction (GitHub/Gitea adapters)
+- ✅ Async processing with Celery
+- ✅ Docker multi-container architecture
+- ✅ Observability infrastructure (Prometheus metrics)
+
+### Phase 3 - Async Processing & Platform Abstraction
+- ⏳ Celery task orchestration
+- ⏳ Webhook signature verification middleware
+- ⏳ Task status polling endpoint
+- ⏳ Retry logic with exponential backoff
+
+### Phase 4 - Context-Aware Reviews (RAG)
+- ⏳ Repository indexing pipeline
+- ⏳ Vector embeddings (OpenAI text-embedding-3-small)
+- ⏳ Supabase pgvector integration
+- ⏳ Context retrieval with citations
+
+### Phase 5 - Learning Loop (RLHF)
+- ⏳ Feedback processing workflow
+- ⏳ Learned constraints with embedding matching
+- ⏳ 90-day constraint expiration
+- ⏳ False positive suppression
+
+### Phase 6 - Observability
+- ⏳ Prometheus metrics integration
+- ⏳ Grafana dashboards
+- ⏳ Alerting rules
+
+### Phase 7 - IDE Integration (MCP)
+- ⏳ MCP manifest endpoint
+- ⏳ Tool schema definitions
+- ⏳ IDE agent support
 
 ## ❓ Troubleshooting
 
-*   **Bot doesn't reply:** Check the Docker logs (`docker logs gitea-ai-codereview`). If you see "Connection refused", ensure `GITEA_HOST` is reachable from inside the bot container (use `host.docker.internal` or the actual LAN IP, not `localhost`).
-*   **Prompt not updating:** Ensure you have mounted the volume `- ./prompts:/app/prompts` in your `docker-compose.yml`. If running locally (no Docker), ensure you are editing the file in the project root.
-*   **404 on Webhook:** Ensure the Target URL ends with the correct endpoint (usually `/hook` or `/webhook`).
-*   **LLM Connection Errors:** If using a local LLM (like Ollama), verify `LLM_BASE_URL` is accessible by the container. Ensure the URL includes the version suffix (e.g., `/v1`).
+### Common Issues
 
-### Relevant Video Resource
+**Webhook returns 401 Unauthorized:**
+- Verify `PLATFORM_GITHUB_WEBHOOK_SECRET` or `PLATFORM_GITEA_WEBHOOK_SECRET` is set
+- Check webhook secret matches between platform and `.env`
 
-[Better Code Reviews with AI? GitHub Copilot and Qodo Merge Tested](https://www.youtube.com/watch?v=wmmMYFVNxA0)
-This video compares different AI code review strategies and tools, helping you understand the type of feedback you can expect when integrating LLMs into your PR workflow.
+**Celery worker not processing tasks:**
+- Ensure Redis is running: `docker-compose ps`
+- Check worker logs: `docker logs cortexreview-worker`
+- Verify `CELERY_BROKER_URL` matches Redis container
 
+**Supabase connection failures:**
+- Verify `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` are correct
+- Test connection: `python scripts/test_supabase.py`
+- Check network access from container
+
+**Reviews missing context citations:**
+- Ensure repository has been indexed: `POST /v1/repositories/{repo_id}/index`
+- Check Supabase `knowledge_base` table has embeddings
+- Verify RAG is enabled in review config: `use_rag_context: true`
+
+### Debug Mode
+
+Enable detailed logging by setting `LOG_LEVEL=DEBUG` in `.env`:
+
+```bash
+LOG_LEVEL=DEBUG docker-compose up api worker
+```
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read our contributing guidelines and submit pull requests to the `001-cortexreview-platform` branch.
+
+## 🙏 Acknowledgments
+
+Built with:
+- [FastAPI](https://fastapi.tiangolo.com/) - Modern web framework for building APIs
+- [Celery](https://docs.celeryproject.org/) - Distributed task queue
+- [Supabase](https://supabase.com/) - Open-source Firebase alternative
+- [OpenAI](https://openai.com/) - AI model provider
+- [Prometheus](https://prometheus.io/) - Metrics collection
+- [Grafana](https://grafana.com/) - Visualization platform

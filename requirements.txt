@@ -1,3 +1,4 @@
+# Phase 1 Dependencies (Existing)
 annotated-types==0.7.0
 anyio==4.4.0
 certifi==2024.7.4
@@ -8,7 +9,7 @@ dnspython==2.6.1
 email_validator==2.2.0
 fastapi==0.111.0
 fastapi-cli==0.0.4
-h11==0.16.0
+h11>=0.13,<0.15
 httpcore==1.0.5
 httptools==0.6.1
 httpx==0.27.0
@@ -30,7 +31,7 @@ requests==2.32.4
 rich==13.7.1
 shellingham==1.5.4
 sniffio==1.3.1
-starlette==0.49.1
+starlette>=0.37.2,<0.38.0
 typer==0.12.3
 typing_extensions==4.12.2
 ujson==5.10.0
@@ -39,3 +40,26 @@ uvicorn==0.30.1
 watchfiles==1.1.1
 websockets==12.0
 win32-setctime==1.1.0
+
+# Phase 2 Dependencies (CortexReview Platform)
+# Celery for async task processing
+celery[redis]>=5.3.0
+redis>=5.0.0
+
+# Supabase for vector database and SQL
+supabase>=2.0.0
+
+# Observability
+prometheus-client>=0.20.0
+
+# Git integration
+gitpython>=3.1.40
+pygithub>=2.3.0
+
+# Configuration
+pydantic-settings>=2.0.0
+
+# Testing (TDD Phase 1)
+pytest>=8.4.0
+pytest-asyncio>=0.23.0
+pytest-mock>=3.14.0

@@ -1,4 +1,5 @@
 import re
+
 import requests
 
 from utils import logger
@@ -11,8 +12,10 @@ class GiteaClient:
 
     def get_diff_blocks(self, owner: str, repo: str, sha: str) -> str:
         # Get the diff of the commit
-        endpoint = f"https://{self.host}/api/v1/repos/{owner}/{repo}/git/commits/{sha}.diff?access_token={self.token}"
-        res = requests.get(endpoint)
+        # Use Authorization header instead of query parameter for security (tokens won't be in logs)
+        endpoint = f"https://{self.host}/api/v1/repos/{owner}/{repo}/git/commits/{sha}.diff"
+        headers = {"Authorization": f"token {self.token}"}
+        res = requests.get(endpoint, headers=headers)
         if res.status_code == 200 and res.text != "":
             diff_blocks = re.split("diff --git ", res.text.strip())
             # 去掉空字符串
@@ -24,10 +27,10 @@ class GiteaClient:
             logger.error(f"Failed to get diff content: {res.text}")
             return None
 
-    def create_issue(
-        self, owner: str, repo: str, title: str, body: str, ref: str, pusher: str
-    ):
-        endpoint = f"https://{self.host}/api/v1/repos/{owner}/{repo}/issues?access_token={self.token}"
+    def create_issue(self, owner: str, repo: str, title: str, body: str, ref: str, pusher: str):
+        # Use Authorization header instead of query parameter for security
+        endpoint = f"https://{self.host}/api/v1/repos/{owner}/{repo}/issues"
+        headers = {"Authorization": f"token {self.token}"}
         data = {
             "assignee": "jenkins",
             "assignees": [pusher],
@@ -39,18 +42,20 @@ class GiteaClient:
             "ref": ref,
             "title": title,
         }
-        res = requests.post(endpoint, json=data)
+        res = requests.post(endpoint, json=data, headers=headers)
         if res.status_code == 201:
             return res.json()
         else:
             return None
 
     def add_issue_comment(self, owner, repo, issue_id, comment):
-        endpoint = f"https://{self.host}/api/v1/repos/{owner}/{repo}/issues/{issue_id}/comments?access_token={self.token}"
+        # Use Authorization header instead of query parameter for security
+        endpoint = f"https://{self.host}/api/v1/repos/{owner}/{repo}/issues/{issue_id}/comments"
+        headers = {"Authorization": f"token {self.token}"}
         data = {
             "body": comment,
         }
-        res = requests.post(endpoint, json=data)
+        res = requests.post(endpoint, json=data, headers=headers)
         if res.status_code == 201:
             return res.json()
         else:

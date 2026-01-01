@@ -7,8 +7,8 @@ files with YAML front matter support and variable substitution.
 
 import os
 import re
-from loguru import logger
 
+from loguru import logger
 
 # Default fallback prompt when no prompt file is available
 _FALLBACK_PROMPT = """You are a senior code reviewer. Analyze the provided code diff for:
@@ -49,6 +49,7 @@ def _strip_yaml_front_matter(content: str) -> tuple[str, dict]:
             # Parse YAML metadata (imported here to avoid dependency if not needed)
             try:
                 import yaml
+
                 metadata = yaml.safe_load(yaml_content) or {}
             except Exception:
                 logger.warning("Failed to parse YAML front matter, treating as plain text")
@@ -78,6 +79,7 @@ def _substitute_variables(content: str, context: dict[str, str]) -> str:
         >>> _substitute_variables("Hello ${name}", {"name": "World"})
         'Hello World'
     """
+
     def replacer(match):
         var_name = match.group(1)
         if var_name in context:
@@ -86,7 +88,7 @@ def _substitute_variables(content: str, context: dict[str, str]) -> str:
         logger.warning("Variable ${" + var_name + "} not found in context, leaving placeholder")
         return match.group(0)
 
-    return re.sub(r'\$\{([a-zA-Z0-9_]+)\}', replacer, content)
+    return re.sub(r"\$\{([a-zA-Z0-9_]+)\}", replacer, content)
 
 
 def load_prompt(filename: str, context: dict[str, str] | None = None) -> str:
@@ -119,13 +121,13 @@ def load_prompt(filename: str, context: dict[str, str] | None = None) -> str:
         context = {}
 
     # Default context values
-    context.setdefault('locale', 'zh-cn')
-    context.setdefault('input-focus', 'general best practices')
+    context.setdefault("locale", "zh-cn")
+    context.setdefault("input-focus", "general best practices")
 
-    file_path = os.path.join(os.path.dirname(__file__), '..', 'prompts', filename)
+    file_path = os.path.join(os.path.dirname(__file__), "..", "prompts", filename)
 
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, encoding="utf-8") as f:
             content = f.read()
 
         # 1. Strip YAML Front Matter

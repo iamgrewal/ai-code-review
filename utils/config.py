@@ -1,16 +1,24 @@
+"""
+CortexReview Platform - Configuration Management
+
+Refactored to use pydantic-settings for type-safe environment variable loading
+with Phase 2 variables for Celery, Supabase, and observability.
+"""
+
 import os
-from dotenv import load_dotenv
+
 from loguru import logger
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Webhook:
+class Webhook(BaseSettings):
     """Configuration for optional notification webhooks."""
 
-    def __init__(self) -> None:
-        self.url: str | None = None
-        self.header_name: str | None = None
-        self.header_value: str | None = None
-        self.request_body: str | None = None
+    url: str | None = None
+    header_name: str | None = None
+    header_value: str | None = None
+    request_body: str | None = None
 
     @property
     def is_init(self) -> bool:
@@ -18,101 +26,221 @@ class Webhook:
         return bool(self.url and self.request_body)
 
 
-class Config:
+class Config(BaseSettings):
     """
-    Centralized configuration loader using python-dotenv.
+    Centralized configuration loader using pydantic-settings.
 
     Loads all environment variables from .env file and provides
     typed access throughout the application. Implements graceful
     degradation with fallback values for optional settings.
     """
 
-    # LLM Configuration
-    LLM_PROVIDER: str
-    LLM_API_KEY: str | None
-    LLM_BASE_URL: str | None
-    LLM_MODEL: str
-    LLM_LOCALE: str
+    # -------------------------------------------------------------------------
+    # Pydantic Settings Configuration
+    # -------------------------------------------------------------------------
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_nested_delimiter="__",  # Enables nested models with __ separator
+        extra="ignore",  # Ignore extra env vars
+        case_sensitive=False,  # Allow case-insensitive env var matching
+    )
 
-    # Legacy Compatibility
-    COPILOT_TOKEN: str | None
-    OPENAI_KEY: str | None
+    # -------------------------------------------------------------------------
+    # Git Platform Configuration
+    # -------------------------------------------------------------------------
+    # Platform selection: github, gitea
+    PLATFORM: str = Field(default="gitea")
 
     # Gitea Configuration
-    GITEA_HOST: str
-    GITEA_TOKEN: str
+    GITEA_TOKEN: str = Field(..., description="Gitea API authentication token")
+    GITEA_HOST: str = Field(..., description="Gitea server host (e.g., server:3000)")
 
+    # GitHub Configuration
+    GITHUB_TOKEN: str | None = Field(default=None, description="GitHub API token")
+
+    # -------------------------------------------------------------------------
+    # LLM Configuration
+    # -------------------------------------------------------------------------
+    # Primary LLM API key (highest priority)
+    LLM_API_KEY: str | None = Field(default=None, description="Primary LLM API key")
+
+    # Custom LLM endpoint URL
+    LLM_BASE_URL: str | None = Field(
+        default=None, description="Custom LLM endpoint URL (for local LLMs or enterprise proxies)"
+    )
+
+    # Model configuration
+    LLM_MODEL: str = Field(default="gpt-4", description="Model identifier for LLM requests")
+    LLM_LOCALE: str = Field(default="en_us", description="Response language locale")
+    LLM_PROVIDER: str = Field(default="openai", description="Provider identifier for logging")
+
+    # Embedding model for RAG
+    EMBEDDING_MODEL: str = Field(
+        default="text-embedding-3-small", description="Embedding model for RAG context retrieval"
+    )
+
+    # Legacy Compatibility (fallback)
+    OPENAI_KEY: str | None = Field(default=None, description="Legacy OpenAI API key (deprecated)")
+    COPILOT_TOKEN: str | None = Field(default=None, description="Legacy Copilot token")
+
+    # -------------------------------------------------------------------------
+    # Celery Configuration (Phase 2)
+    # -------------------------------------------------------------------------
+    CELERY_BROKER_URL: str = Field(
+        default="redis://redis:6379/0", description="Celery broker URL (Redis connection string)"
+    )
+    CELERY_RESULT_BACKEND: str = Field(
+        default="redis://redis:6379/0",
+        description="Celery result backend URL (Redis connection string)",
+    )
+    CELERY_WORKER_CONCURRENCY: int = Field(
+        default=4, description="Number of Celery worker processes"
+    )
+    CELERY_TASK_TIME_LIMIT: int = Field(
+        default=300, description="Celery task time limit in seconds"
+    )
+
+    # -------------------------------------------------------------------------
+    # Supabase Configuration (Phase 2)
+    # -------------------------------------------------------------------------
+    SUPABASE_URL: str | None = Field(default=None, description="Supabase project URL")
+    SUPABASE_SERVICE_KEY: str | None = Field(
+        default=None, description="Supabase service role key for database operations"
+    )
+    SUPABASE_DB_URL: str | None = Field(
+        default=None, description="Direct PostgreSQL connection string (for migrations/scripting)"
+    )
+
+    # -------------------------------------------------------------------------
+    # Webhook Signature Verification (Phase 2)
+    # -------------------------------------------------------------------------
+    PLATFORM_GITHUB_WEBHOOK_SECRET: str | None = Field(
+        default=None, description="GitHub webhook secret for HMAC-SHA256 signature verification"
+    )
+    PLATFORM_GITEA_WEBHOOK_SECRET: str | None = Field(
+        default=None, description="Gitea webhook secret for HMAC-SHA256 signature verification"
+    )
+    PLATFORM_GITHUB_VERIFY_SIGNATURE: bool = Field(
+        default=True, description="Enable GitHub webhook signature verification"
+    )
+    PLATFORM_GITEA_VERIFY_SIGNATURE: bool = Field(
+        default=True, description="Enable Gitea webhook signature verification"
+    )
+
+    # -------------------------------------------------------------------------
+    # RAG Configuration (Phase 2)
+    # -------------------------------------------------------------------------
+    RAG_ENABLED: bool = Field(default=True, description="Enable RAG context-aware reviews")
+    RAG_THRESHOLD: float = Field(
+        default=0.75, ge=0.0, le=1.0, description="RAG similarity threshold for context matching"
+    )
+    RAG_MATCH_COUNT_MIN: int = Field(
+        default=3, ge=1, le=10, description="Minimum RAG match count for context retrieval"
+    )
+    RAG_MATCH_COUNT_MAX: int = Field(
+        default=10, ge=1, le=50, description="Maximum RAG match count for context retrieval"
+    )
+
+    # -------------------------------------------------------------------------
+    # RLHF Configuration (Phase 2)
+    # -------------------------------------------------------------------------
+    RLHF_ENABLED: bool = Field(default=True, description="Enable RLHF learning loop")
+    RLHF_THRESHOLD: float = Field(
+        default=0.8, ge=0.0, le=1.0, description="RLHF similarity threshold for constraint matching"
+    )
+    FEEDBACK_ENABLED: bool = Field(default=True, description="Enable feedback processing")
+    CONSTRAINT_EXPIRATION_DAYS: int = Field(
+        default=90, ge=1, le=365, description="Learned constraint expiration in days"
+    )
+
+    # -------------------------------------------------------------------------
+    # Observability Configuration (Phase 2)
+    # -------------------------------------------------------------------------
+    ENABLE_PROMETHEUS: bool = Field(default=True, description="Enable Prometheus metrics endpoint")
+    ENABLE_GRAFANA: bool = Field(default=True, description="Enable Grafana dashboards")
+    LOG_LEVEL: str = Field(default="INFO", description="Application log level")
+
+    # -------------------------------------------------------------------------
     # Application Settings
-    IGNORED_FILE_SUFFIX: str
+    # -------------------------------------------------------------------------
+    IGNORED_FILE_SUFFIX: str = Field(
+        default=".json,.md,.lock",
+        description="Comma-separated file extensions to skip during code review",
+    )
 
-    # Optional Webhook
-    webhook: Webhook | None
+    # -------------------------------------------------------------------------
+    # Optional Webhook (nested model)
+    # -------------------------------------------------------------------------
+    webhook: Webhook | None = Field(default=None, description="Notification webhook configuration")
 
-    def __init__(self, config_file: str | None = None) -> None:
+    # -------------------------------------------------------------------------
+    # Post-processing and Validation
+    # -------------------------------------------------------------------------
+    def __init__(self, **kwargs):
         """
-        Load configuration from .env file.
-
-        Args:
-            config_file: Optional path to custom .env file
+        Initialize configuration and apply legacy compatibility transformations.
 
         Raises:
-            ValueError: If required variables (GITEA_TOKEN, GITEA_HOST) are missing
-                        or if no LLM authentication method is configured.
+            ValueError: If required variables are missing or invalid
         """
-        load_dotenv(config_file)
-
-        # Gitea Configuration (Required)
-        self.GITEA_TOKEN = os.getenv("GITEA_TOKEN")
-        self.GITEA_HOST = os.getenv("GITEA_HOST")
-
-        # LLM Configuration with strict priority
-        # Priority: LLM_API_KEY > OPENAI_KEY > COPILOT_TOKEN
-        self.LLM_API_KEY = os.getenv("LLM_API_KEY")
-        self.OPENAI_KEY = os.getenv("OPENAI_KEY")
-        self.COPILOT_TOKEN = os.getenv("COPILOT_TOKEN")
+        super().__init__(**kwargs)
 
         # Apply strict priority for LLM authentication
-        if self.LLM_API_KEY:
-            # Use LLM_API_KEY, ignore legacy keys
-            pass
-        elif self.OPENAI_KEY:
-            # Use OPENAI_KEY as fallback
-            self.LLM_API_KEY = self.OPENAI_KEY
-            logger.warning("OPENAI_KEY is deprecated, use LLM_API_KEY instead")
-        elif self.COPILOT_TOKEN:
-            # Use COPILOT_TOKEN as fallback
-            self.LLM_API_KEY = self.COPILOT_TOKEN
-        else:
-            # No LLM auth method configured
-            self.LLM_API_KEY = None
+        # Priority: LLM_API_KEY > OPENAI_KEY > COPILOT_TOKEN
+        if not self.LLM_API_KEY:
+            if self.OPENAI_KEY:
+                self.LLM_API_KEY = self.OPENAI_KEY
+                logger.warning("OPENAI_KEY is deprecated, use LLM_API_KEY instead")
+            elif self.COPILOT_TOKEN:
+                self.LLM_API_KEY = self.COPILOT_TOKEN
+                logger.warning("COPILOT_TOKEN is deprecated, use LLM_API_KEY instead")
+            else:
+                # No LLM auth method configured
+                pass
 
-        self.LLM_BASE_URL = os.getenv("LLM_BASE_URL")
-        self.LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4")
-        self.LLM_LOCALE = os.getenv("LLM_LOCALE", "en_us")
-        self.LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
-
-        # Application Settings
-        self.IGNORED_FILE_SUFFIX = os.getenv("IGNORED_FILE_SUFFIX", ".json,.md,.lock")
-
-        # Optional Webhook
-        webhook_url = os.getenv("WEBHOOK_URL")
-        if webhook_url:
-            self.webhook = Webhook()
-            self.webhook.url = webhook_url
-            self.webhook.header_name = os.getenv("WEBHOOK_HEADER_NAME")
-            self.webhook.header_value = os.getenv("WEBHOOK_HEADER_VALUE")
-            self.webhook.request_body = os.getenv("WEBHOOK_REQUEST_BODY")
-
-            # Warn if webhook configuration is incomplete
-            if not self.webhook.is_init:
-                logger.warning(
-                    "Webhook configuration is incomplete. "
-                    "Both WEBHOOK_URL and WEBHOOK_REQUEST_BODY are required."
+        # Initialize webhook if URL provided
+        if not self.webhook:
+            webhook_url = kwargs.get("webhook_url") or os.getenv("WEBHOOK_URL")
+            if webhook_url:
+                self.webhook = Webhook(
+                    url=webhook_url,
+                    header_name=kwargs.get("webhook_header_name")
+                    or os.getenv("WEBHOOK_HEADER_NAME"),
+                    header_value=kwargs.get("webhook_header_value")
+                    or os.getenv("WEBHOOK_HEADER_VALUE"),
+                    request_body=kwargs.get("webhook_request_body")
+                    or os.getenv("WEBHOOK_REQUEST_BODY"),
                 )
-        else:
-            self.webhook = None
 
+                # Warn if webhook configuration is incomplete
+                if not self.webhook.is_init:
+                    logger.warning(
+                        "Webhook configuration is incomplete. "
+                        "Both WEBHOOK_URL and WEBHOOK_REQUEST_BODY are required."
+                    )
+
+        # Validate required configuration
         self._validate()
+
+    @field_validator("PLATFORM")
+    @classmethod
+    def validate_platform(cls, v: str) -> str:
+        """Validate platform is either github or gitea."""
+        if v.lower() not in ("github", "gitea"):
+            logger.warning(f"Invalid platform: {v}. Defaulting to 'gitea'")
+            return "gitea"
+        return v.lower()
+
+    @field_validator("LOG_LEVEL")
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
+        """Validate log level is a valid value."""
+        valid_levels = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+        if v.upper() not in valid_levels:
+            logger.warning(f"Invalid log level: {v}. Defaulting to 'INFO'")
+            return "INFO"
+        return v.upper()
 
     def _validate(self) -> None:
         """Validate required configuration is present."""
@@ -127,3 +255,25 @@ class Config:
                 "At least one LLM authentication method required: "
                 "LLM_API_KEY (recommended), OPENAI_KEY, or COPILOT_TOKEN"
             )
+
+        # Warn if Supabase not configured (required for RAG/RLHF)
+        if self.RAG_ENABLED or self.RLHF_ENABLED:
+            if not self.SUPABASE_URL or not self.SUPABASE_SERVICE_KEY:
+                logger.warning(
+                    "Supabase configuration is missing. RAG and RLHF features will be disabled."
+                )
+                self.RAG_ENABLED = False
+                self.RLHF_ENABLED = False
+
+    # -------------------------------------------------------------------------
+    # Computed Properties
+    # -------------------------------------------------------------------------
+    @property
+    def effective_llm_base_url(self) -> str:
+        """Get the effective LLM base URL with fallback."""
+        return self.LLM_BASE_URL or "https://api.openai.com/v1"
+
+    @property
+    def effective_llm_api_key(self) -> str | None:
+        """Get the effective LLM API key after priority resolution."""
+        return self.LLM_API_KEY
