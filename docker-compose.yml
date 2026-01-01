@@ -243,6 +243,8 @@ services:
 
   # ---------------------------------------------------------------------------
   # Prometheus: Metrics collection
+  # NOTE: Host port 9091 (not 9090) to avoid conflicts with other services.
+  # Access at: http://localhost:9091
   # ---------------------------------------------------------------------------
   prometheus:
     image: prom/prometheus:latest
@@ -251,7 +253,7 @@ services:
     networks:
       - cortexreview-network
     ports:
-      - "9091:9090"
+      - "9091:9090"  # Host:9091 → Container:9090 (standard Prometheus port)
     volumes:
       - ./docs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docs/prometheus/alerts:/etc/prometheus/alerts:ro

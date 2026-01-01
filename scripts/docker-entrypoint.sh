@@ -119,13 +119,18 @@ run_migrations() {
             echo_yellow "Applying migration: $migration_name"
 
             # Execute migration with error handling (use postgres superuser or configured POSTGRES_USER)
-            if psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-supabase}" -f "$migration" > /dev/null 2>&1; then
+            # Capture stderr for debugging on failure, suppress stdout (psql noise)
+            if psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-supabase}" -f "$migration" > /dev/null 2>"/tmp/migration_error_$$.log"; then
                 echo_green "✓ Applied: $migration_name"
                 migration_count=$((migration_count + 1))
+                # Clean up error log on success
+                rm -f "/tmp/migration_error_$$.log"
             else
                 echo_red "✗ Failed to apply migration: $migration_name"
                 echo_red "The migration file may have syntax errors or dependencies not met."
-                echo_red "Check the SQL file and ensure proper ordering."
+                echo_red "Error details:"
+                cat "/tmp/migration_error_$$.log" | head -20 || echo_red "  (Unable to read error log)"
+                rm -f "/tmp/migration_error_$$.log"
                 return 1
             fi
         fi

@@ -224,7 +224,9 @@ docker ps | grep studio
 1. Open browser: http://localhost:8000
 2. Login with credentials:
    - Email: `admin@localhost.local`
-   - Password: (from environment, default: `admin`)
+   - Password: (from `STUDIO_DEFAULT_PASSWORD` environment variable)
+   - **SECURITY WARNING**: The default password `admin` should **NEVER** be used in production.
+     Change immediately via `STUDIO_DEFAULT_PASSWORD` in your `.env` file.
 3. Navigate to: Table Editor
 4. Verify tables visible: knowledge_base, learned_constraints, feedback_audit_log
 
