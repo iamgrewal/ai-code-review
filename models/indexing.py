@@ -30,7 +30,7 @@ class IndexingRequest(BaseModel):
             "examples": [
                 {
                     "git_url": "https://github.com/owner/repo.git",
-                    "access_token": "ghp_xxxxxxxxxxxx",
+                    "access_token": "YOUR_GITHUB_TOKEN_HERE",
                     "branch": "main",
                     "index_depth": "deep",
                 }

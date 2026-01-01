@@ -179,6 +179,7 @@ dist/
 build/
 
 logs/
+backups/
 
 # User-specific prompt files (can be customized per deployment)
 prompts/
