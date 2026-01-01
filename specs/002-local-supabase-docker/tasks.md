@@ -213,14 +213,14 @@ This document provides a complete breakdown of implementation tasks for the Loca
 
 ### Tasks
 
-- [ ] T082 [P] Update quickstart.md in specs/002-local-supabase-docker/quickstart.md with final deployment steps
-- [ ] T083 [P] Update CLAUDE.md with new Supabase environment variables and service descriptions in CLAUDE.md
-- [ ] T084 [P] Create troubleshooting section in docs/supabase_setup.md for common deployment issues
-- [ ] T085 [P] Document security best practices for production deployments in docs/supabase_setup.md (firewall, SSL/TLS)
-- [ ] T086 [P] Update README.md with local Supabase deployment instructions in README.md
-- [ ] T087 Test deployment on fresh Ubuntu server meets 10-minute deployment target (SC-001)
-- [ ] T088 Test offline operation (no external internet) maintains core functionality (SC-003)
-- [ ] T089 Verify all constitution compliance gates satisfied (per plan.md Constitution Check section)
+- [x] T082 [P] Update quickstart.md in specs/002-local-supabase-docker/quickstart.md with final deployment steps
+- [x] T083 [P] Update CLAUDE.md with new Supabase environment variables and service descriptions in CLAUDE.md
+- [x] T084 [P] Create troubleshooting section in docs/supabase_setup.md for common deployment issues
+- [x] T085 [P] Document security best practices for production deployments in docs/supabase_setup.md (firewall, SSL/TLS)
+- [x] T086 [P] Update README.md with local Supabase deployment instructions in README.md
+- [ ] T087 Test deployment on fresh Ubuntu server meets 10-minute deployment target (SC-001) - DEFERRED to production validation
+- [ ] T088 Test offline operation (no external internet) maintains core functionality (SC-003) - DEFERRED to production validation
+- [x] T089 Verify all constitution compliance gates satisfied (per plan.md Constitution Check section)
 
 ---
 

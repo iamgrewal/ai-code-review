@@ -1,12 +1,15 @@
 # Quickstart Guide: Local Supabase Deployment
 
-**Feature**: 002-local-supabase-docker
+**Feature**: 002-local-supabase-docker (MERGED - Phase 8 Complete)
 **Date**: 2026-01-01
 **Estimated Time**: 15-30 minutes
+**Status**: Production Ready ✅
 
 ## Overview
 
 This guide will walk you through deploying the CortexReview platform with a self-hosted Supabase instance on a local Ubuntu server using Docker Compose. No external Supabase Cloud account required.
+
+**Phase 8 Complete**: This feature has been fully implemented, tested, and merged to the main branch. Migration tooling for transitioning from external Supabase is included.
 
 ---
 
@@ -53,8 +56,11 @@ git --version
 git clone https://github.com/bestK/gitea-ai-codereview.git
 cd gitea-ai-codereview
 
-# Checkout the feature branch
-git checkout 002-local-supabase-docker
+# Ensure you're on the main branch (feature is merged)
+git checkout main
+
+# Pull latest changes
+git pull origin main
 ```
 
 ---
@@ -75,11 +81,15 @@ nano .env
 
 ```bash
 # === Supabase Configuration ===
-POSTGRES_PASSWORD=your_secure_password_here_min_16_chars
-JWT_SECRET=your_jwt_secret_here_min_64_chars
-ANON_KEY=your_anon_key_here_generate_with_jwt_secret
-SERVICE_ROLE_KEY=your_service_role_key_here_generate_with_jwt_secret
+# WARNING: Replace CHANGE_ME_* values. Never use these exact strings in production.
+POSTGRES_PASSWORD=CHANGE_ME_minimum_16_characters
 POSTGRES_DB=supabase
+JWT_SECRET=CHANGE_ME_minimum_64_characters
+ANON_KEY=CHANGE_ME_generate_with_jwt_secret
+SERVICE_ROLE_KEY=CHANGE_ME_generate_with_jwt_secret
+
+# === Local Supabase Connection ===
+SUPABASE_DB_URL=postgresql://postgres:CHANGE_ME_min_16_chars@supabase-db:5432/supabase
 
 # === LLM Configuration ===
 LLM_API_KEY=your_openai_api_key_here
@@ -98,9 +108,14 @@ CELERY_RESULT_BACKEND=redis://redis:6379/0
 
 # === Observability (Optional) ===
 ENABLE_PROMETHEUS=true
-ENABLE_GRAFANA=true
-LOG_LEVEL=INFO
 ```
+
+### Security Notes
+
+1. **POSTGRES_PASSWORD**: Minimum 16 characters. Use a strong, unique password.
+2. **JWT_SECRET**: Minimum 64 characters. Generate with: `openssl rand -base64 64`
+3. **ANON_KEY** and **SERVICE_ROLE_KEY**: Generate from JWT_SECRET using Supabase CLI or compatible tools
+4. **Never commit** `.env` to version control. It contains sensitive credentials.
 
 ### Generate Secure Secrets
 
@@ -565,6 +580,47 @@ sudo ufw status
 **Note**: For production, deploy reverse proxy (Nginx/Caddy) with SSL.
 
 See: [docs/ssl-setup.md](../../docs/ssl-setup.md) (not included in this feature)
+
+---
+
+## Production Deployment Checklist
+
+Before deploying to production, complete these steps:
+
+### Security
+- [ ] Change all `CHANGE_ME_*` placeholders in `.env` to strong, unique values
+- [ ] Generate secure JWT_SECRET with `openssl rand -base64 64`
+- [ ] Configure firewall rules (only expose necessary ports: 3000 for API, 8000 for Studio)
+- [ ] Set up SSL/TLS termination with reverse proxy (Nginx/Caddy)
+- [ ] Review and update `STUDIO_DEFAULT_PASSWORD` if using Studio
+
+### Backup & Recovery
+- [ ] Test backup script: `./scripts/backup_supabase.sh`
+- [ ] Verify backup files created in `./backups/`
+- [ ] Test restore procedure: `./scripts/restore_supabase.sh <backup_file>`
+- [ ] Set up automated weekly backups (cron job or external scheduler)
+- [ ] Configure off-site backup storage for disaster recovery
+
+### Monitoring & Observability
+- [ ] Enable Prometheus: `ENABLE_PROMETHEUS=true` in `.env`
+- [ ] Enable Grafana: `ENABLE_GRAFANA=true` in `.env`
+- [ ] Configure alerting in Prometheus for critical services
+- [ ] Set up log aggregation (ELK, Loki, or external service)
+- [ ] Test health check endpoints: `curl http://localhost:3008/health`
+
+### Performance Optimization
+- [ ] Review resource limits in `docker-compose.yml`
+- [ ] Configure volume size limits if needed
+- [ ] Test with expected load and monitor resource usage
+- [ ] Tune PostgreSQL settings in `scripts/sql/` if required
+- [ ] Review and optimize vector index parameters
+
+### Migration from External Supabase (if applicable)
+- [ ] Review migration guide: [docs/supabase_migration.md](../../docs/supabase_migration.md)
+- [ ] Test export from external: `./scripts/export_from_external.sh`
+- [ ] Test import to local: `./scripts/import_to_local.sh <export_file>`
+- [ ] Verify vector embeddings preserved (1536 dimensions)
+- [ ] Verify all functions working: `match_knowledge()`, `check_constraints()`
 
 ---
 

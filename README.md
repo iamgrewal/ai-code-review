@@ -62,17 +62,35 @@ CortexReview transforms code review from a stateless checklist into a stateful, 
 | **Docker** | Latest (with Docker Compose) |
 | **Git Platform** | GitHub (any) or Gitea 1.19+ |
 | **LLM API** | OpenAI-compatible (OpenAI, Azure, Ollama, LocalAI, etc.) |
-| **Vector Database** | Supabase (PostgreSQL + pgvector) |
+| **Vector Database** | Supabase (PostgreSQL + pgvector) - **Local or Cloud** |
 | **Message Broker** | Redis 7+ |
 
 ## 📦 Installation & Deployment
 
-### Quick Start (Docker Compose)
+### Deployment Options
+
+The CortexReview platform supports **two deployment modes** for Supabase:
+
+1. **Local Supabase (Recommended)**: Self-hosted Supabase using Docker Compose
+   - ✅ No external dependencies
+   - ✅ Full data control and sovereignty
+   - ✅ Reduced operational costs
+   - ✅ Offline operation capability
+   - See: [Local Supabase Quickstart](specs/002-local-supabase-docker/quickstart.md)
+
+2. **External Supabase Cloud**: Use Supabase Cloud hosting
+   - ❌ Requires Supabase Cloud account
+   - ❌ External dependency
+   - ❌ Ongoing operational costs
+   - See: [docs/supabase_migration.md](docs/supabase_migration.md)
+
+### Quick Start (Local Supabase)
 
 1. **Clone the repository:**
    ```bash
    git clone https://github.com/bestK/gitea-ai-codereview.git
    cd gitea-ai-codereview
+   git checkout main
    ```
 
 2. **Configure environment variables:**
@@ -80,16 +98,31 @@ CortexReview transforms code review from a stateless checklist into a stateful, 
    cp .env.example .env
    # Edit .env with your configuration
    ```
+   **Critical**: Replace all `CHANGE_ME_*` placeholders with secure values:
+   ```bash
+   # Generate secure secrets
+   openssl rand -base64 64  # JWT_SECRET
+   openssl rand -base64 32  # POSTGRES_PASSWORD
+   ```
 
 3. **Start the services:**
    ```bash
-   docker-compose up -d --build
+   docker-compose up -d
    ```
 
-4. **Initialize Supabase schema:**
+4. **Verify deployment:**
    ```bash
-   docker-compose exec api python scripts/init_supabase.py
+   # Check all containers are healthy
+   docker-compose ps
+
+   # Test health endpoint
+   curl http://localhost:3008/health
    ```
+
+For detailed deployment instructions, see:
+- [Local Supabase Quickstart Guide](specs/002-local-supabase-docker/quickstart.md)
+- [Supabase Setup & Troubleshooting](docs/supabase_setup.md)
+- [Supabase Migration Guide](docs/supabase_migration.md)
 
 ### Environment Variables
 
@@ -102,11 +135,19 @@ CortexReview transforms code review from a stateless checklist into a stateful, 
 | **LLM** | `LLM_API_KEY` | ✅ | - |
 | | `LLM_BASE_URL` | ❌ | `https://api.openai.com/v1` |
 | | `LLM_MODEL` | ❌ | `gpt-4` |
+| | `EMBEDDING_MODEL` | ❌ | `text-embedding-3-small` |
 | **Celery** | `CELERY_BROKER_URL` | ✅ | `redis://redis:6379/0` |
 | | `CELERY_RESULT_BACKEND` | ✅ | `redis://redis:6379/0` |
-| **Supabase** | `SUPABASE_URL` | ✅ | - |
-| | `SUPABASE_SERVICE_KEY` | ✅ | - |
+| **Local Supabase** | `POSTGRES_PASSWORD` | ✅ (local) | `CHANGE_ME_*` |
+| | `POSTGRES_DB` | ✅ (local) | `supabase` |
+| | `JWT_SECRET` | ✅ (local) | `CHANGE_ME_*` |
+| | `ANON_KEY` | ✅ (local) | `CHANGE_ME_*` |
+| | `SERVICE_ROLE_KEY` | ✅ (local) | `CHANGE_ME_*` |
+| | `SUPABASE_DB_URL` | ✅ (local) | `postgresql://...` |
+| **External Supabase** | `SUPABASE_URL` | ✅ (cloud) | - |
+| | `SUPABASE_SERVICE_KEY` | ✅ (cloud) | - |
 | **Webhook Secrets** | `PLATFORM_GITHUB_WEBHOOK_SECRET` | ❌ | - |
+| | `PLATFORM_GITEA_WEBHOOK_SECRET` | ❌ | - |
 | | `PLATFORM_GITEA_WEBHOOK_SECRET` | ❌ | - |
 
 See [`.env.example`](.env.example) for all available configuration options.

@@ -432,7 +432,152 @@ Clear module separation: configuration utilities, prompt loading, Gitea API clie
 
 ---
 
-## Phase 2: CortexReview Architecture (Upcoming)
+## Local Supabase Docker Deployment (Implemented ✅)
+
+**Feature Branch**: `002-local-supabase-docker`
+**Status**: Complete - Merged to main (Phase 8)
+**Documentation**: [specs/002-local-supabase-docker/](specs/002-local-supabase-docker/)
+
+### Overview
+
+The CortexReview platform now supports self-hosted Supabase deployment using Docker Compose, enabling full local operation without dependency on external Supabase Cloud services.
+
+### Services
+
+The local Supabase stack includes the following services (orchestrated via `docker-compose.yml`):
+
+| Service | Container Name | Purpose | Ports |
+|---------|----------------|---------|-------|
+| **supabase-db** | cortexreview-supabase-db | PostgreSQL 15 + pgvector extension | Internal (5432) |
+| **supabase-rest** | cortexreview-supabase-rest | PostgREST API server | Internal (3000) |
+| **supabase-studio** | cortexreview-supabase-studio | Database dashboard (dev only) | 8000:3000 (dev profile) |
+| **api** | cortexreview-api | FastAPI application | 3008 |
+| **worker** | cortexreview-worker | Celery background tasks | Internal |
+| **redis** | cortexreview-redis | Message broker | Internal (6379) |
+
+### Database Schema
+
+The local Supabase deployment includes:
+
+**Tables:**
+- `knowledge_base` - RAG knowledge with 1536-dim vector embeddings
+- `learned_constraints` - RLHF feedback with 1536-dim vector embeddings
+- `feedback_audit_log` - Human feedback history
+- `schema_migrations` - Migration tracking
+
+**Vector Search Functions:**
+- `match_knowledge(query_embedding, threshold, count)` - RAG similarity search
+- `check_constraints(query_embedding, threshold)` - RLHF pattern matching
+
+**Indexes:**
+- IVFFlat vector indexes on `knowledge_base.embedding` and `learned_constraints.embedding`
+
+### Environment Variables
+
+The local Supabase deployment requires the following environment variables in `.env`:
+
+```bash
+# === Local Supabase Configuration ===
+POSTGRES_PASSWORD=CHANGE_ME_minimum_16_characters  # Database password (min 16 chars)
+POSTGRES_DB=supabase                           # Database name
+JWT_SECRET=CHANGE_ME_minimum_64_characters         # JWT secret (min 64 chars)
+ANON_KEY=CHANGE_ME_generate_with_jwt_secret        # Anonymous API key
+SERVICE_ROLE_KEY=CHANGE_ME_generate_with_jwt_secret  # Service role key
+
+# === Local Supabase Connection ===
+SUPABASE_DB_URL=postgresql://postgres:CHANGE_ME_min_16_chars@supabase-db:5432/supabase
+
+# === Migration from External Supabase (optional) ===
+EXTERNAL_SUPABASE_HOST=db.xyz.supabase.co
+EXTERNAL_SUPABASE_PORT=5432
+EXTERNAL_SUPABASE_USER=postgres
+EXTERNAL_SUPABASE_PASSWORD=your_password
+EXTERNAL_SUPABASE_DB=postgres
+```
+
+### Automated Initialization
+
+The database schema initializes automatically on first container startup:
+
+1. **Pre-flight checks**: Validates environment variables and system resources
+2. **pgvector installation**: Installs vector extension automatically
+3. **Schema migrations**: Applies SQL migrations in `scripts/sql/` (001-007)
+4. **Migration tracking**: Uses `schema_migrations` table to prevent re-initialization
+
+See: [scripts/docker-entrypoint.sh](scripts/docker-entrypoint.sh)
+
+### Backup & Restore
+
+**Backup:**
+```bash
+./scripts/backup_supabase.sh
+# Creates: ./backups/supabase_backup_<timestamp>.sql.gz
+```
+
+**Restore:**
+```bash
+./scripts/restore_supabase.sh ./backups/supabase_backup_<timestamp>.sql.gz
+```
+
+**Retention Policy:** Weekly backups with 90-day retention recommended.
+
+### Migration from External Supabase
+
+For users transitioning from external Supabase Cloud:
+
+```bash
+# 1. Export from external Supabase
+export EXTERNAL_SUPABASE_DB_URL="postgresql://user:pass@host:5432/db"
+./scripts/export_from_external.sh
+
+# 2. Import to local Supabase
+docker compose up -d
+./scripts/import_to_local.sh ./backups/exports/supabase_export_*.sql.gz
+```
+
+See: [docs/supabase_migration.md](docs/supabase_migration.md)
+
+### Deployment Quickstart
+
+```bash
+# 1. Clone repository
+git clone https://github.com/bestK/gitea-ai-codereview.git
+cd gitea-ai-codereview
+git checkout main
+
+# 2. Configure environment
+cp .env.example .env
+# Edit .env with secure values
+
+# 3. Start services
+docker compose up -d
+
+# 4. Verify deployment
+docker compose ps
+curl http://localhost:3008/health
+```
+
+For complete deployment guide, see: [specs/002-local-supabase-docker/quickstart.md](specs/002-local-supabase-docker/quickstart.md)
+
+### Resource Requirements
+
+| Resource | Minimum | Recommended |
+|----------|---------|-------------|
+| RAM | 4GB | 8GB |
+| CPU Cores | 2 | 4 |
+| Disk Space | 20GB | 50GB |
+| Operating System | Ubuntu 20.04/22.04 LTS | Ubuntu 22.04 LTS |
+
+### Production Considerations
+
+- **Security**: Use reverse proxy (Nginx/Caddy) with SSL/TLS for production
+- **Firewall**: Only expose necessary ports (3000 for API, 8000 for Studio)
+- **Monitoring**: Enable Prometheus and Grafana for observability
+- **Backups**: Configure automated weekly backups with off-site storage
+
+---
+
+## Phase 2: CortexReview Architecture (Previously Upcoming - Now Implemented)
 
 ### Vision: From Stateless to Stateful AI
 
