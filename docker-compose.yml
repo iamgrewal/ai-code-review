@@ -218,10 +218,12 @@ services:
 
   # ---------------------------------------------------------------------------
   # Supabase Studio: Web-based database dashboard
-  # NOTE: Pinned to specific version for reproducible deployments (update as needed)
+  # NOTE: Using latest tag for automatic updates. Pin specific version for production.
+  # Healthcheck removed: Studio lacks standard tools (curl/wget/nc) and is functional without it.
+  # Access at http://localhost:8000
   # ---------------------------------------------------------------------------
   supabase-studio:
-    image: supabase/studio:20240101-ad6ef8f
+    image: supabase/studio:latest
     container_name: cortexreview-supabase-studio
     restart: always
     networks:
