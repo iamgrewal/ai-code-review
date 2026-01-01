@@ -45,16 +45,52 @@ llm_client = OpenAI(
 
 # Initialize Supabase client (if configured)
 supabase_client: Client | None = None
+
+# Support three Supabase deployment modes:
+# 1. External Supabase Cloud (SUPABASE_URL + SUPABASE_SERVICE_KEY)
+# 2. Local Supabase via PostgREST (SUPABASE_DB_URL + SERVICE_ROLE_KEY)
+# 3. No Supabase (features gracefully degraded)
 if config.SUPABASE_URL and config.SUPABASE_SERVICE_KEY:
+    # Mode 1: External Supabase Cloud
     try:
         supabase_client = create_client(
             config.SUPABASE_URL,
             config.SUPABASE_SERVICE_KEY,
         )
-        logger.info("Supabase client initialized")
+        logger.info("Supabase client initialized (external Supabase Cloud)")
     except Exception as e:
         logger.warning(f"Supabase initialization failed: {e}. RAG/RLHF features disabled.")
         supabase_client = None
+elif config.SUPABASE_DB_URL:
+    # Mode 2: Local Supabase via PostgREST API
+    # The local Supabase deployment includes supabase-rest (PostgREST) service
+    # We generate a JWT token signed with JWT_SECRET for authentication
+    import os
+    import time
+    from jose import jwt
+
+    local_rest_url = "http://supabase-rest:3000"  # Internal Docker network
+    jwt_secret = os.getenv("JWT_SECRET")
+
+    if jwt_secret:
+        try:
+            # Generate a service role JWT token for local Supabase
+            # This token has full access to the database
+            payload = {
+                "role": "service_role",
+                "iss": "supabase",  # Issuer
+                "iat": int(time.time()),  # Issued at
+                "exp": int(time.time()) + 3600,  # Expires in 1 hour (will be refreshed)
+            }
+            token = jwt.encode(payload, jwt_secret, algorithm="HS256")
+
+            supabase_client = create_client(local_rest_url, token)
+            logger.info("Supabase client initialized (local Supabase via PostgREST with JWT)")
+        except Exception as e:
+            logger.warning(f"Local Supabase initialization failed: {e}. RAG/RLHF features disabled.")
+            supabase_client = None
+    else:
+        logger.warning("JWT_SECRET not configured for local Supabase. RAG/RLHF features disabled.")
 
 # Initialize RAG repository (if Supabase available)
 knowledge_repo: KnowledgeRepository | None = None

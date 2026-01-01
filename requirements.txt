@@ -59,6 +59,9 @@ pygithub>=2.3.0
 # Configuration
 pydantic-settings>=2.0.0
 
+# JWT generation for local Supabase
+python-jose[cryptography]>=3.3.0
+
 # Testing (TDD Phase 1)
 pytest>=8.4.0
 pytest-asyncio>=0.23.0

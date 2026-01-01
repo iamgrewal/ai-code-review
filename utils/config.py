@@ -257,10 +257,16 @@ class Config(BaseSettings):
             )
 
         # Warn if Supabase not configured (required for RAG/RLHF)
+        # Support both external Supabase Cloud and local Supabase deployments
         if self.RAG_ENABLED or self.RLHF_ENABLED:
-            if not self.SUPABASE_URL or not self.SUPABASE_SERVICE_KEY:
+            has_external_supabase = bool(self.SUPABASE_URL and self.SUPABASE_SERVICE_KEY)
+            has_local_supabase = bool(self.SUPABASE_DB_URL)
+
+            if not has_external_supabase and not has_local_supabase:
                 logger.warning(
-                    "Supabase configuration is missing. RAG and RLHF features will be disabled."
+                    "Supabase configuration is missing. RAG and RLHF features will be disabled. "
+                    "Configure SUPABASE_URL + SUPABASE_SERVICE_KEY for external Supabase Cloud, "
+                    "or SUPABASE_DB_URL for local Supabase deployment."
                 )
                 self.RAG_ENABLED = False
                 self.RLHF_ENABLED = False
