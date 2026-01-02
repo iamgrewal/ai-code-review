@@ -189,8 +189,8 @@ prompts/
 specs/
 .claude/
 CLAUDE.md 
-.README.zh.md
-.README.md.old
+README.zh.md
+README.md.old
 
 # Documentation (optional - keep in repo or remove as needed)
 docs/
