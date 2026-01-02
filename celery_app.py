@@ -26,6 +26,9 @@ config = Config()
 # Create Celery application
 app = Celery("cortexreview")
 
+# Auto-discover tasks from worker module
+app.autodiscover_tasks(["worker"], force=True)
+
 # -----------------------------------------------------------------------------
 # Configuration Settings
 # -----------------------------------------------------------------------------

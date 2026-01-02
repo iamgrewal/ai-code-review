@@ -63,8 +63,8 @@ RUN pip install --no-cache-dir celery[beat,scheduler]
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD celery -A celery_app inspect ping || exit 1
 
-# Run Celery worker
-CMD ["celery", "-A", "celery_app", "worker", "--loglevel=info", "--concurrency=4"]
+# Run Celery worker with queues for code_review, indexing, and feedback
+CMD ["celery", "-A", "celery_app", "worker", "--loglevel=info", "--concurrency=4", "-Q", "code_review,indexing,feedback,default"]
 
 
 # -----------------------------------------------------------------------------

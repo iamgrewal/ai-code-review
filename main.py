@@ -364,7 +364,7 @@ async def get_task_status(
     return response_data
 
 
-@app.post(f"{api_v1_prefix}/repositories/{{repo_id}}/index")
+@app.post(f"{api_v1_prefix}/repositories/{{repo_id:path}}/index")
 async def trigger_indexing(
     repo_id: str,
     request_data: dict,
@@ -390,12 +390,16 @@ async def trigger_indexing(
     from models.indexing import IndexingRequest
     from worker import index_repository
 
-    # Validate Supabase configuration
-    if not config.SUPABASE_URL or not config.SUPABASE_SERVICE_KEY:
+    # Validate Supabase configuration (support both external and local)
+    has_external_supabase = bool(config.SUPABASE_URL and config.SUPABASE_SERVICE_KEY)
+    has_local_supabase = bool(config.SUPABASE_DB_URL)
+
+    if not has_external_supabase and not has_local_supabase:
         raise HTTPException(
             status_code=503,
             detail="Supabase configuration required for indexing. "
-            "Set SUPABASE_URL and SUPABASE_SERVICE_KEY environment variables.",
+            "Set SUPABASE_URL + SUPABASE_SERVICE_KEY for external Supabase Cloud, "
+            "or SUPABASE_DB_URL for local Supabase deployment.",
         )
 
     # Parse request

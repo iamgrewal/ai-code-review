@@ -278,7 +278,7 @@ class IndexingService:
                 )
 
                 duration = time.time() - start_time
-                indexing_duration_seconds.labels(repo_id=repo_id, depth=depth.value).observe(
+                indexing_duration_seconds.labels(repo_id=repo_id, index_depth=depth.value).observe(
                     duration
                 )
                 indexing_chunks_embedded_total.labels(repo_id=repo_id).inc(chunks_indexed)

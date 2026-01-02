@@ -39,7 +39,7 @@ class IndexingRequest(BaseModel):
     )
 
     git_url: str = Field(..., description="Git repository HTTPS URL")
-    access_token: str = Field(..., min_length=1, description="Personal access token for cloning")
+    access_token: str = Field(default="", description="Personal access token for cloning (optional for public repos)")
     branch: str = Field(default="main", description="Branch to index")
     index_depth: IndexDepth = Field(default=IndexDepth.DEEP, description="Indexing mode")
 

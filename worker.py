@@ -74,10 +74,10 @@ elif config.SUPABASE_DB_URL:
 
     if jwt_secret:
         try:
-            # Generate a service role JWT token for local Supabase
-            # This token has full access to the database
+            # Generate a JWT token for local Supabase with postgres role
+            # Note: Using postgres role instead of service_role for local deployment
             payload = {
-                "role": "service_role",
+                "role": "postgres",  # Use postgres role (has privileges on tables)
                 "iss": "supabase",  # Issuer
                 "iat": int(time.time()),  # Issued at
                 "exp": int(time.time()) + 3600,  # Expires in 1 hour (will be refreshed)
@@ -85,6 +85,10 @@ elif config.SUPABASE_DB_URL:
             token = jwt.encode(payload, jwt_secret, algorithm="HS256")
 
             supabase_client = create_client(local_rest_url, token)
+
+            # Patch rest_url to remove /rest/v1 prefix (local PostgREST uses root path)
+            supabase_client.rest_url = local_rest_url
+
             logger.info("Supabase client initialized (local Supabase via PostgREST with JWT)")
         except Exception as e:
             logger.warning(f"Local Supabase initialization failed: {e}. RAG/RLHF features disabled.")
