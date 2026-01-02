@@ -189,10 +189,12 @@ prompts/
 specs/
 .claude/
 .claude/commands/
+.claude/**
+
 specs/002-local-supabase-docker/
 CLAUDE.md
 README.zh.md
 README.md.old
-
+specs/**
 # Documentation (optional - keep in repo or remove as needed)
 docs/
